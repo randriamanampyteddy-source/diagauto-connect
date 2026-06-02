@@ -25,18 +25,26 @@ const Register = () => {
   }
 
   if (done) return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
       <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
         <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <MdDirectionsCar size={32} className="text-green-600" />
         </div>
-        <h2 className="text-xl font-bold text-gray-800 mb-2">Inscription réussie !</h2>
-        <p className="text-gray-500 mb-4">Votre compte est en attente de validation par l'administrateur.</p>
-        <div className="bg-primary/10 rounded-xl p-4 mb-6">
-          <p className="text-sm text-gray-600">Votre ID Client :</p>
-          <p className="text-2xl font-bold text-primary mt-1">{done}</p>
+        <h2 className="text-xl font-bold text-gray-800 mb-2">Inscription envoyée !</h2>
+        <p className="text-gray-500 mb-6">Votre demande a été transmise à l'administrateur. Vous recevrez votre <strong>ID Client</strong> une fois votre compte validé.</p>
+
+        <div className="bg-primary/10 border-2 border-primary/20 rounded-xl p-5 mb-6">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Votre ID Client (provisoire)</p>
+          <p className="text-3xl font-bold text-primary tracking-widest font-mono">{done}</p>
+          <p className="text-xs text-gray-400 mt-3">⚠️ Conservez cet ID — il vous servira à vous connecter une fois votre compte activé par l'admin.</p>
         </div>
-        <Link to="/login" className="btn-primary w-full block text-center py-3">Se connecter</Link>
+
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6 text-left">
+          <p className="text-sm font-semibold text-yellow-800 mb-1">En attente de validation</p>
+          <p className="text-xs text-yellow-700">L'administrateur doit activer votre compte avant que vous puissiez vous connecter. Utilisez votre ID Client + mot de passe pour accéder à votre espace.</p>
+        </div>
+
+        <Link to="/login" className="btn-primary w-full block text-center py-3 rounded-xl">Aller à la connexion</Link>
       </div>
     </div>
   )

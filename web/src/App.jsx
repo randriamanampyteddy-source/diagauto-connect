@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext'
 import PrivateRoute from './components/PrivateRoute'
 
 // Pages publiques
+import Home from './pages/Home'
 import ClientLogin from './pages/client/Login'
 import Register from './pages/client/Register'
 import AdminLogin from './pages/admin/Login'
@@ -28,7 +29,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           {/* Public */}
-          <Route path="/" element={<Navigate to="/login" />} />
+          <Route path="/" element={<Home />} />
           <Route path="/login" element={<ClientLogin />} />
           <Route path="/register" element={<Register />} />
           <Route path="/admin/login" element={<AdminLogin />} />

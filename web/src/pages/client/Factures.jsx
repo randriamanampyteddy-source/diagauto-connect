@@ -20,7 +20,7 @@ const Factures = () => {
   return (
     <div className="min-h-screen bg-gray-100">
       <header className="bg-primary text-white px-6 py-4 flex items-center gap-3">
-        <Link to="/client/dashboard" className="p-2 rounded-lg hover:bg-white/10"><MdArrowBack size={20} /></Link>
+        <Link to="/dashboard" className="p-2 rounded-lg hover:bg-white/10"><MdArrowBack size={20} /></Link>
         <h1 className="font-bold text-lg">Mes factures</h1>
       </header>
 

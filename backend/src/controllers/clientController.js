@@ -29,6 +29,22 @@ exports.suspendreClient = async (req, res) => {
   }
 };
 
+exports.resetPasswordClient = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const bcrypt = require('bcryptjs');
+    // Génère un mot de passe temporaire : 8 caractères
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    let tempPwd = '';
+    for (let i = 0; i < 8; i++) tempPwd += chars[Math.floor(Math.random() * chars.length)];
+    const hashed = await bcrypt.hash(tempPwd, 10);
+    await db.query('UPDATE clients SET password = ? WHERE id = ?', [hashed, id]);
+    res.json({ message: 'Mot de passe réinitialisé', temp_password: tempPwd });
+  } catch (err) {
+    res.status(500).json({ message: 'Erreur serveur', error: err.message });
+  }
+};
+
 exports.getVehiculesClient = async (req, res) => {
   try {
     const { id } = req.params;
@@ -63,10 +79,10 @@ exports.getMesVehicules = async (req, res) => {
 
 exports.ajouterVehicule = async (req, res) => {
   try {
-    const { marque, modele, annee, immatriculation, couleur } = req.body;
+    const { marque, modele, annee, immatriculation, couleur, energie } = req.body;
     await db.query(
-      'INSERT INTO vehicules (client_id, marque, modele, annee, immatriculation, couleur) VALUES (?, ?, ?, ?, ?, ?)',
-      [req.user.id, marque, modele, annee || null, immatriculation, couleur]
+      'INSERT INTO vehicules (client_id, marque, modele, annee, immatriculation, couleur, energie) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [req.user.id, marque, modele, annee || null, immatriculation, couleur || null, energie || null]
     );
     res.status(201).json({ message: 'Véhicule ajouté' });
   } catch (err) {

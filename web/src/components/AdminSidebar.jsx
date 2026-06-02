@@ -2,24 +2,25 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import {
   MdDashboard, MdPeople, MdEventNote, MdBuild,
-  MdDescription, MdReceipt, MdArticle, MdLogout
+  MdDescription, MdReceipt, MdArticle, MdLogout, MdManageAccounts
 } from 'react-icons/md'
 
 const links = [
-  { to: '/admin/dashboard', icon: <MdDashboard size={20} />, label: 'Tableau de bord' },
-  { to: '/admin/clients', icon: <MdPeople size={20} />, label: 'Clients' },
-  { to: '/admin/rendezvous', icon: <MdEventNote size={20} />, label: 'Rendez-vous' },
-  { to: '/admin/interventions', icon: <MdBuild size={20} />, label: 'Interventions' },
-  { to: '/admin/devis', icon: <MdDescription size={20} />, label: 'Devis' },
-  { to: '/admin/proformas', icon: <MdArticle size={20} />, label: 'Proforma' },
-  { to: '/admin/factures', icon: <MdReceipt size={20} />, label: 'Factures' },
+  { to: '/dashboard', icon: <MdDashboard size={20} />, label: 'Tableau de bord' },
+  { to: '/clients', icon: <MdPeople size={20} />, label: 'Clients' },
+  { to: '/rendezvous', icon: <MdEventNote size={20} />, label: 'Rendez-vous' },
+  { to: '/interventions', icon: <MdBuild size={20} />, label: 'Interventions' },
+  { to: '/devis', icon: <MdDescription size={20} />, label: 'Devis' },
+  { to: '/proformas', icon: <MdArticle size={20} />, label: 'Proforma' },
+  { to: '/factures', icon: <MdReceipt size={20} />, label: 'Factures' },
+  { to: '/mon-compte', icon: <MdManageAccounts size={20} />, label: 'Mon compte' },
 ]
 
 const AdminSidebar = () => {
   const { logout } = useAuth()
   const navigate = useNavigate()
 
-  const handleLogout = () => { logout(); navigate('/login') }
+  const handleLogout = () => { logout(); navigate('/login', { replace: true }) }
 
   return (
     <aside className="w-64 min-h-screen bg-primary flex flex-col py-6 px-3 fixed left-0 top-0 z-40">
@@ -41,7 +42,7 @@ const AdminSidebar = () => {
         ))}
       </nav>
 
-      <button onClick={handleLogout} className="sidebar-link mt-4 text-red-300 hover:text-red-100">
+      <button onClick={handleLogout} className="sidebar-link mt-2 text-red-300 hover:text-red-100 border-t border-white/10 pt-3">
         <MdLogout size={20} />
         <span className="text-sm">Déconnexion</span>
       </button>

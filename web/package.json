@@ -4,7 +4,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "dev:admin": "vite --config vite.admin.config.js --port 3001",
+    "dev:client": "vite --config vite.client.config.js --port 3000",
+    "build:admin": "vite build --config vite.admin.config.js",
+    "build:client": "vite build --config vite.client.config.js",
     "preview": "vite preview"
   },
   "dependencies": {

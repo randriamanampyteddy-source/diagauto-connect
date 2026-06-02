@@ -57,12 +57,41 @@ exports.clientRegister = async (req, res) => {
   }
 };
 
-// CLIENT LOGIN
+// ADMIN CHANGER MOT DE PASSE
+exports.adminChangerPassword = async (req, res) => {
+  try {
+    const { ancien_password, nouveau_password } = req.body;
+    const [rows] = await db.query('SELECT * FROM admins WHERE id = ?', [req.user.id]);
+    if (!rows.length) return res.status(404).json({ message: 'Admin introuvable' });
+
+    const valid = await bcrypt.compare(ancien_password, rows[0].password);
+    if (!valid) return res.status(401).json({ message: 'Ancien mot de passe incorrect' });
+
+    const hashed = await bcrypt.hash(nouveau_password, 10);
+    await db.query('UPDATE admins SET password = ? WHERE id = ?', [hashed, req.user.id]);
+    res.json({ message: 'Mot de passe modifié avec succès' });
+  } catch (err) {
+    res.status(500).json({ message: 'Erreur serveur', error: err.message });
+  }
+};
+
+// ADMIN GET PROFIL
+exports.adminGetProfil = async (req, res) => {
+  try {
+    const [rows] = await db.query('SELECT id, nom, prenom, email, telephone FROM admins WHERE id = ?', [req.user.id]);
+    if (!rows.length) return res.status(404).json({ message: 'Admin introuvable' });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ message: 'Erreur serveur', error: err.message });
+  }
+};
+
+// CLIENT LOGIN (par ID client + password)
 exports.clientLogin = async (req, res) => {
   try {
-    const { email, password } = req.body;
-    const [rows] = await db.query('SELECT * FROM clients WHERE email = ?', [email]);
-    if (!rows.length) return res.status(404).json({ message: 'Client introuvable' });
+    const { id_client, password } = req.body;
+    const [rows] = await db.query('SELECT * FROM clients WHERE id_client = ?', [id_client]);
+    if (!rows.length) return res.status(404).json({ message: 'ID Client introuvable' });
 
     const client = rows[0];
     if (client.statut === 'en_attente')

@@ -45,6 +45,21 @@ exports.getAllRdv = async (req, res) => {
   }
 };
 
+// Tous les RDV actifs (dates + immatriculation) — pour le calendrier client
+exports.getTousRdvActifs = async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT r.id, r.date_rdv, r.heure_rdv, r.statut, v.immatriculation
+       FROM rendezvous r JOIN vehicules v ON r.vehicule_id = v.id
+       WHERE r.statut != 'annule'
+       ORDER BY r.date_rdv ASC`
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ message: 'Erreur serveur', error: err.message });
+  }
+};
+
 // Changer statut rendez-vous (admin)
 exports.changerStatutRdv = async (req, res) => {
   try {

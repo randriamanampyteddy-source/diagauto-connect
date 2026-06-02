@@ -8,9 +8,12 @@ const rdvCtrl = require('../controllers/rendezvousController');
 const factureCtrl = require('../controllers/factureController');
 const dashCtrl = require('../controllers/dashboardController');
 const interCtrl = require('../controllers/interventionController');
+const atelierCtrl = require('../controllers/atelierController');
 
 // AUTH
 router.post('/auth/admin/login', authCtrl.adminLogin);
+router.get('/auth/admin/profil', verifyToken, isAdmin, authCtrl.adminGetProfil);
+router.put('/auth/admin/password', verifyToken, isAdmin, authCtrl.adminChangerPassword);
 router.post('/auth/client/register', authCtrl.clientRegister);
 router.post('/auth/client/login', authCtrl.clientLogin);
 
@@ -22,6 +25,7 @@ router.get('/admin/clients', verifyToken, isAdmin, clientCtrl.getAllClients);
 router.put('/admin/clients/:id/valider', verifyToken, isAdmin, clientCtrl.validerClient);
 router.put('/admin/clients/:id/suspendre', verifyToken, isAdmin, clientCtrl.suspendreClient);
 router.get('/admin/clients/:id/vehicules', verifyToken, isAdmin, clientCtrl.getVehiculesClient);
+router.post('/admin/clients/:id/reset-password', verifyToken, isAdmin, clientCtrl.resetPasswordClient);
 
 // ADMIN - Rendez-vous
 router.get('/admin/rendezvous', verifyToken, isAdmin, rdvCtrl.getAllRdv);
@@ -54,6 +58,7 @@ router.post('/client/vehicules', verifyToken, isClient, clientCtrl.ajouterVehicu
 // CLIENT - Rendez-vous
 router.post('/client/rendezvous', verifyToken, isClient, rdvCtrl.creerRdv);
 router.get('/client/rendezvous', verifyToken, isClient, rdvCtrl.getMesRdv);
+router.get('/client/rendezvous/tous', verifyToken, isClient, rdvCtrl.getTousRdvActifs);
 
 // CLIENT - Interventions
 router.get('/client/interventions', verifyToken, isClient, interCtrl.getMesInterventions);
@@ -61,5 +66,10 @@ router.get('/client/interventions', verifyToken, isClient, interCtrl.getMesInter
 // CLIENT - Factures & Devis
 router.get('/client/factures', verifyToken, isClient, factureCtrl.getMesFactures);
 router.get('/client/devis', verifyToken, isClient, factureCtrl.getMesDevis);
+
+// ATELIER CONFIG
+router.get('/admin/atelier', verifyToken, isAdmin, atelierCtrl.getConfig);
+router.put('/admin/atelier', verifyToken, isAdmin, atelierCtrl.updateConfig);
+router.get('/admin/factures/:id/imprimer', verifyToken, isAdmin, atelierCtrl.getFactureDetail);
 
 module.exports = router;

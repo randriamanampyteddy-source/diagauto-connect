@@ -3,29 +3,42 @@
 @tailwind utilities;
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; }
 
-.sidebar-link {
-  @apply flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:bg-white/10 hover:text-white transition-all;
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #f4f6f9;
+  -webkit-font-smoothing: antialiased;
 }
-.sidebar-link.active {
-  @apply bg-white/20 text-white font-semibold;
+
+@layer components {
+  .sidebar-link {
+    @apply flex items-center gap-3 px-4 py-2.5 rounded-xl text-blue-100 hover:bg-white/10 hover:text-white transition-all text-sm;
+  }
+  .sidebar-link.active {
+    @apply bg-white/20 text-white font-semibold shadow-inner;
+  }
+  .card {
+    @apply bg-white rounded-2xl shadow-sm p-5;
+  }
+  .btn-primary {
+    @apply bg-primary text-white px-4 py-2 rounded-xl hover:bg-blue-900 transition-all font-medium text-sm;
+  }
+  .btn-danger {
+    @apply bg-red-500 text-white px-4 py-2 rounded-xl hover:bg-red-600 transition-all font-medium text-sm;
+  }
+  .btn-success {
+    @apply bg-emerald-500 text-white px-4 py-2 rounded-xl hover:bg-emerald-600 transition-all font-medium text-sm;
+  }
+  .input {
+    @apply w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all bg-white;
+  }
+  .badge {
+    @apply text-xs font-semibold px-2.5 py-1 rounded-full inline-flex items-center gap-1;
+  }
 }
-.card {
-  @apply bg-white rounded-xl shadow-sm p-5;
-}
-.btn-primary {
-  @apply bg-primary text-white px-4 py-2 rounded-lg hover:bg-blue-900 transition-all font-medium;
-}
-.btn-danger {
-  @apply bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-all font-medium;
-}
-.btn-success {
-  @apply bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-all font-medium;
-}
-.input {
-  @apply w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary;
-}
-.badge {
-  @apply text-xs font-semibold px-2 py-1 rounded-full;
-}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
