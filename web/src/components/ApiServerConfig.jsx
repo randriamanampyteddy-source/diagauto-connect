@@ -61,7 +61,7 @@ const ApiServerConfig = ({ compact = false }) => {
             className="input text-xs"
             value={value}
             onChange={e => setValue(e.target.value)}
-            placeholder="https://api.diagautomada.com/api"
+            placeholder="https://diagauto-connect.onrender.com/api"
           />
           <div className="flex flex-wrap gap-2 mt-3">
             <button type="button" onClick={test} disabled={testing} className="px-3 py-1.5 rounded-lg bg-white border text-xs font-semibold">

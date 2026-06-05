@@ -1,4 +1,4 @@
 {
   "mode": "cloud",
-  "apiBaseUrl": "https://api.diagautomada.com/api"
+  "apiBaseUrl": "https://diagauto-connect.onrender.com/api"
 }

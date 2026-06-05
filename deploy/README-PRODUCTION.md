@@ -8,7 +8,7 @@ Client APK -> Internet HTTPS -> Backend API + MySQL -> Admin
 
 Par defaut les builds cloud utilisent:
 
-- API: `https://api.diagautomada.com/api`
+- API: `https://diagauto-connect.onrender.com/api`
 - Client web: `https://client.diagautomada.com`
 
 Si le domaine change, modifier `VITE_API_BASE_URL` avant build ou utiliser
@@ -17,7 +17,7 @@ Si le domaine change, modifier `VITE_API_BASE_URL` avant build ou utiliser
 ## Serveur
 
 1. Louer un VPS Ubuntu.
-2. Pointer le DNS `api.diagautomada.com` vers l'IP du VPS.
+2. Pointer le DNS de votre domaine API vers le serveur choisi si vous ajoutez un domaine personnalise.
 3. Installer Docker et Docker Compose.
 4. Copier le projet sur le serveur.
 5. Copier `backend/.env.production.example` vers `backend/.env.production`.
@@ -41,7 +41,7 @@ docker compose -f docker-compose.production.yml up -d --build
 Sur le PC de build:
 
 ```powershell
-$env:VITE_API_BASE_URL="https://api.diagautomada.com/api"
+$env:VITE_API_BASE_URL="https://diagauto-connect.onrender.com/api"
 npm.cmd run build:mobile:client --prefix web
 npm.cmd run android:sync --prefix mobile/client
 ```
@@ -54,5 +54,5 @@ L'Admin v1.5+ peut utiliser l'API publique. Si besoin, cliquer
 `Configuration serveur` sur l'ecran de login et mettre:
 
 ```text
-https://api.diagautomada.com/api
+https://diagauto-connect.onrender.com/api
 ```
