@@ -1,6 +1,6 @@
 {
   "name": "diagauto-admin-desktop",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "description": "DiagAuto Mada - Administration Windows",
   "main": "main.js",
   "author": "DiagAuto Mada",
@@ -10,7 +10,7 @@
     "build:backend": "node ../web/node_modules/esbuild/bin/esbuild ../backend/server.js --bundle --platform=node --format=cjs --outfile=backend-runtime/server.js",
     "dist": "npm.cmd run build:web && npm.cmd run build:backend && npm.cmd run dist:installer && npm.cmd run dist:portable",
     "dist:installer": "npm.cmd run build:web && npm.cmd run build:backend && electron-builder --win nsis",
-    "dist:portable": "npm.cmd run build:web && npm.cmd run build:backend && electron-builder --win portable --config.artifactName=DiagAuto-Admin-Portable-1.5.2-x64.exe",
+    "dist:portable": "npm.cmd run build:web && npm.cmd run build:backend && electron-builder --win portable --config.artifactName=DiagAuto-Admin-Portable-1.5.3-x64.exe",
     "release:local": "npm.cmd run dist:installer && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish-local-update.ps1"
   },
   "devDependencies": {

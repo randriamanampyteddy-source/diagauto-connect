@@ -116,6 +116,44 @@ const Parametres = () => {
   }
 
   const whatsappConfigure = whatsappStatus?.configuration?.configure ?? stats?.whatsapp_configure
+  const whatsappConfig = whatsappStatus?.configuration
+  const diagnosticToneClass = {
+    green: {
+      box: 'border-green-200 bg-green-50',
+      icon: 'text-green-700',
+      text: 'text-green-700',
+    },
+    red: {
+      box: 'border-red-200 bg-red-50',
+      icon: 'text-red-700',
+      text: 'text-red-700',
+    },
+    blue: {
+      box: 'border-blue-200 bg-blue-50',
+      icon: 'text-blue-700',
+      text: 'text-blue-700',
+    },
+  }
+  const diagnosticItems = whatsappConfig ? [
+    {
+      label: 'Phone Number ID',
+      ok: whatsappConfig.phone_number_id_present,
+      status: whatsappConfig.phone_number_id_present ? 'Present' : 'Manquant',
+      tone: whatsappConfig.phone_number_id_present ? 'green' : 'red',
+    },
+    {
+      label: 'API Token',
+      ok: whatsappConfig.api_token_present,
+      status: whatsappConfig.api_token_present ? 'Present' : 'Manquant',
+      tone: whatsappConfig.api_token_present ? 'green' : 'red',
+    },
+    {
+      label: 'Facture client',
+      ok: true,
+      status: whatsappConfig.app_client_url_utilisable ? 'Lien web actif' : 'Mode APK actif',
+      tone: whatsappConfig.app_client_url_utilisable ? 'green' : 'blue',
+    },
+  ] : []
 
   return (
     <AdminLayout>
@@ -173,7 +211,7 @@ const Parametres = () => {
                 <p className="text-xs mt-1">
                   {whatsappConfigure
                     ? `${stats.whatsapp_envoyes} notification(s) envoyée(s).`
-                    : 'Renseignez WHATSAPP_PHONE_NUMBER_ID et WHATSAPP_API_TOKEN sur le serveur.'}
+                    : 'Notifications dans l’application actives. Pour l’envoi WhatsApp automatique, renseignez les cles Meta WhatsApp Cloud API sur le serveur.'}
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -219,24 +257,23 @@ const Parametres = () => {
           {whatsappStatus ? (
             <>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-                {[
-                  ['Phone Number ID', whatsappStatus.configuration.phone_number_id_present],
-                  ['API Token', whatsappStatus.configuration.api_token_present],
-                  ['Lien facture client', whatsappStatus.configuration.app_client_url_utilisable],
-                ].map(([label, ok]) => (
-                  <div key={label} className={`border rounded-xl p-3 flex items-center gap-3 ${ok ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
-                    {ok ? <MdCheckCircle size={22} className="text-green-700 shrink-0" /> : <MdErrorOutline size={22} className="text-red-700 shrink-0" />}
+                {diagnosticItems.map(({ label, ok, status, tone }) => {
+                  const classes = diagnosticToneClass[tone]
+                  return (
+                  <div key={label} className={`border rounded-xl p-3 flex items-center gap-3 ${classes.box}`}>
+                    {ok ? <MdCheckCircle size={22} className={`${classes.icon} shrink-0`} /> : <MdErrorOutline size={22} className={`${classes.icon} shrink-0`} />}
                     <div>
                       <p className="font-semibold text-sm text-gray-800">{label}</p>
-                      <p className={`text-xs ${ok ? 'text-green-700' : 'text-red-700'}`}>{ok ? 'Présent' : 'Manquant ou inutilisable'}</p>
+                      <p className={`text-xs ${classes.text}`}>{status}</p>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
 
               {!whatsappStatus.configuration.app_client_url_utilisable && (
-                <div className="bg-orange-50 border border-orange-200 text-orange-800 rounded-xl p-3 mb-4 text-sm">
-                  Le lien facture externe est désactivé car APP_CLIENT_URL pointe vers localhost ou n’est pas renseigné. Le message indique maintenant d’ouvrir l’application client.
+                <div className="bg-blue-50 border border-blue-200 text-blue-800 rounded-xl p-3 mb-4 text-sm">
+                  Mode APK client actif : les factures, devis et proformas sont disponibles directement dans l app client. Aucun lien web externe n est requis.
                 </div>
               )}
 
