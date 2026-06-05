@@ -11,3 +11,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <ToastContainer position="top-right" autoClose={3000} />
   </React.StrictMode>
 )
+
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {})
+  })
+}

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import ApiServerConfig from '../../components/ApiServerConfig'
 import api from '../../api/axios'
 import { toast } from 'react-toastify'
 import { MdAdminPanelSettings, MdEmail, MdLock, MdVisibility, MdVisibilityOff, MdInfo } from 'react-icons/md'
@@ -124,6 +125,7 @@ const AdminLogin = () => {
               {loading ? 'Connexion...' : 'Se connecter'}
             </button>
           </form>
+          <ApiServerConfig compact />
 
           <p className="text-center text-xs text-gray-300 mt-8">
             © DiagAuto Connect — Espace Administrateur

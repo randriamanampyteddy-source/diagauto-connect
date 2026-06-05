@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../../components/AdminLayout'
+import AdminQuickClientModal from '../../components/AdminQuickClientModal'
 import api from '../../api/axios'
 import { toast } from 'react-toastify'
-import { MdAdd, MdSearch, MdPayment, MdPrint, MdDelete } from 'react-icons/md'
+import { MdAdd, MdSearch, MdPayment, MdPrint, MdDelete, MdPersonAdd, MdPlaylistAdd } from 'react-icons/md'
+import { CATEGORIES_REPARATION, REPARATIONS_DIESEL_COMMON_RAIL } from '../../data/reparationsDieselCommonRail'
+import { getWhatsAppWarning } from '../../utils/whatsapp'
 
 const statusColors = {
   en_cours: 'bg-blue-100 text-blue-700',
@@ -22,9 +25,12 @@ const Interventions = () => {
   const [modal, setModal]         = useState(null)   // 'new' | 'edit'
   const [payModal, setPayModal]   = useState(null)   // intervention sélectionnée
   const [form, setForm]           = useState({ client_id: '', vehicule_id: '', description: '', technicien: '', date_debut: '' })
+  const [repairCategory, setRepairCategory] = useState('')
+  const [repairChoice, setRepairChoice] = useState('')
   const [vehicules, setVehicules] = useState([])
   const [editModal, setEditModal] = useState(null)
   const [editForm, setEditForm]   = useState({ statut: '', date_fin: '' })
+  const [quickClientModal, setQuickClientModal] = useState(false)
 
   // Formulaire facturation paiement
   const [payForm, setPayForm] = useState({
@@ -50,14 +56,53 @@ const Interventions = () => {
     } else setVehicules([])
   }
 
+  const onQuickClientCreated = ({ client, vehicule }) => {
+    setClients(current => [client, ...current])
+    setVehicules([vehicule])
+    setForm(current => ({ ...current, client_id: String(client.id), vehicule_id: String(vehicule.id) }))
+  }
+
   const creer = async () => {
+    if (!form.client_id || !form.vehicule_id || !form.description.trim()) {
+      toast.error('Client, véhicule et réparation obligatoires')
+      return
+    }
     try {
       await api.post('/admin/interventions', form)
       toast.success('Intervention créée')
       setModal(null)
       setForm({ client_id: '', vehicule_id: '', description: '', technicien: '', date_debut: '' })
+      setRepairCategory('')
+      setRepairChoice('')
       load()
     } catch { toast.error('Erreur') }
+  }
+
+  const ajouterReparation = () => {
+    if (!repairChoice) {
+      toast.error('Sélectionnez une réparation')
+      return
+    }
+    const ligne = `[${repairCategory}] ${repairChoice}`
+    if (form.description.includes(ligne)) {
+      toast.warning('Cette réparation est déjà ajoutée')
+      return
+    }
+    setForm(f => ({
+      ...f,
+      description: f.description.trim()
+        ? `${f.description.trim()}\n- ${ligne}`
+        : `- ${ligne}`,
+    }))
+    setRepairChoice('')
+  }
+
+  const ouvrirNouvelleIntervention = () => {
+    setForm({ client_id: '', vehicule_id: '', description: '', technicien: '', date_debut: '' })
+    setVehicules([])
+    setRepairCategory('')
+    setRepairChoice('')
+    setModal('new')
   }
 
   const sauvegarder = async () => {
@@ -112,26 +157,25 @@ const Interventions = () => {
         notes:          payForm.notes,
       })
 
+      const factureId = data.id
+      if (!factureId) throw new Error('Facture creee sans identifiant')
+
       // 2. Enregistrer le paiement si montant > 0
       if (Number(payForm.montant_paye) > 0) {
-        // Récupère l'ID de la facture créée
-        const factures = await api.get('/admin/factures')
-        const nouvelleF = factures.data.find(f => f.numero_facture === data.numero_facture)
-        if (nouvelleF) {
-          await api.put(`/admin/factures/${nouvelleF.id}/paiement`, { montant_paye: payForm.montant_paye })
-          // 3. Marquer intervention terminée
-          await api.put(`/admin/interventions/${payModal.id}/statut`, { statut: 'termine', date_fin: payForm.date_facture })
-          // 4. Ouvrir impression
-          setPayModal(null)
-          load()
-          toast.success('Facture créée et paiement validé !')
-          navigate(`/factures/${nouvelleF.id}/imprimer`)
-        }
+        const { data: paiementData } = await api.put(`/admin/factures/${factureId}/paiement`, { montant_paye: payForm.montant_paye })
+        await api.put(`/admin/interventions/${payModal.id}/statut`, { statut: 'termine', date_fin: payForm.date_facture })
+        setPayModal(null)
+        load()
+        toast.success('Facture creee et paiement valide !')
+        const whatsappWarning = getWhatsAppWarning(paiementData.whatsapp, 'Facture créée et paiement validé')
+        if (whatsappWarning) toast.warning(whatsappWarning)
+        navigate(`/documents/facture/${factureId}/imprimer`)
       } else {
         await api.put(`/admin/interventions/${payModal.id}/statut`, { statut: 'termine', date_fin: payForm.date_facture })
         setPayModal(null)
         load()
-        toast.success('Facture créée !')
+        toast.success('Facture creee !')
+        navigate(`/documents/facture/${factureId}/imprimer`)
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Erreur')
@@ -157,7 +201,7 @@ const Interventions = () => {
             <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <input className="input pl-9 w-56" placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
-          <button onClick={() => setModal('new')} className="btn-primary flex items-center gap-2">
+          <button onClick={ouvrirNouvelleIntervention} className="btn-primary flex items-center gap-2">
             <MdAdd size={18} /> Nouvelle
           </button>
         </div>
@@ -252,8 +296,16 @@ const Interventions = () => {
       {/* ── Modal nouvelle intervention ── */}
       {modal === 'new' && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl w-full max-w-lg p-6">
-            <h2 className="text-lg font-bold mb-4">Nouvelle intervention</h2>
+          <div className="bg-white rounded-2xl w-full max-w-2xl p-6 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div>
+                <h2 className="text-lg font-bold">Nouvelle intervention directe</h2>
+                <p className="text-xs text-gray-500">Aucun rendez-vous requis.</p>
+              </div>
+              <button type="button" onClick={() => setQuickClientModal(true)} className="text-primary font-semibold text-sm flex items-center gap-1">
+                <MdPersonAdd size={18} /> Nouveau client sans APK
+              </button>
+            </div>
             <div className="flex flex-col gap-3">
               <div>
                 <label className="block text-sm font-medium mb-1">Client</label>
@@ -269,9 +321,49 @@ const Interventions = () => {
                   {vehicules.map(v => <option key={v.id} value={v.id}>{v.marque} {v.modele} — {v.immatriculation}</option>)}
                 </select>
               </div>
+              <div className="border border-gray-200 rounded-xl p-3 bg-gray-50">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Catalogue réparations Diesel Common Rail</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <select
+                    className="input bg-white"
+                    value={repairCategory}
+                    onChange={e => { setRepairCategory(e.target.value); setRepairChoice('') }}
+                  >
+                    <option value="">Choisir une catégorie...</option>
+                    {CATEGORIES_REPARATION.map(category => (
+                      <option key={category} value={category}>{category}</option>
+                    ))}
+                  </select>
+                  <select
+                    className="input bg-white"
+                    value={repairChoice}
+                    onChange={e => setRepairChoice(e.target.value)}
+                    disabled={!repairCategory}
+                  >
+                    <option value="">Choisir une réparation...</option>
+                    {(REPARATIONS_DIESEL_COMMON_RAIL[repairCategory] || []).map(repair => (
+                      <option key={repair} value={repair}>{repair}</option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  onClick={ajouterReparation}
+                  disabled={!repairChoice}
+                  className="mt-2 btn-primary text-sm py-2 flex items-center gap-2 disabled:opacity-50"
+                >
+                  <MdPlaylistAdd size={18} /> Ajouter à l’intervention
+                </button>
+              </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Description</label>
-                <textarea className="input" rows={2} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+                <label className="block text-sm font-medium mb-1">Réparations sélectionnées / description personnalisée</label>
+                <textarea
+                  className="input"
+                  rows={5}
+                  placeholder="Ajoutez une ou plusieurs réparations depuis le catalogue, ou saisissez une réparation personnalisée..."
+                  value={form.description}
+                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -440,6 +532,12 @@ const Interventions = () => {
           </div>
         </div>
       )}
+
+      <AdminQuickClientModal
+        open={quickClientModal}
+        onClose={() => setQuickClientModal(false)}
+        onCreated={onQuickClientCreated}
+      />
     </AdminLayout>
   )
 }

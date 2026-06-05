@@ -1,0 +1,11 @@
+{
+  "appId": "mg.diagauto.admin",
+  "appName": "DiagAuto Admin",
+  "webDir": "../../web/dist-admin",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

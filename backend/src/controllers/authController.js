@@ -2,6 +2,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 
+const getErrorMessage = (err) => err?.message || err?.code || err?.name || String(err) || 'Erreur inconnue';
+
 const generateClientId = () => {
   const num = Math.floor(10000 + Math.random() * 90000);
   return `CLI-${num}`;
@@ -28,14 +30,14 @@ exports.adminLogin = async (req, res) => {
       user: { id: admin.id, nom: admin.nom, prenom: admin.prenom, email: admin.email, role: 'admin' }
     });
   } catch (err) {
-    res.status(500).json({ message: 'Erreur serveur', error: err.message });
+    res.status(500).json({ message: 'Erreur serveur', error: getErrorMessage(err) });
   }
 };
 
 // CLIENT INSCRIPTION
 exports.clientRegister = async (req, res) => {
   try {
-    const { nom, prenom, email, password, telephone, adresse } = req.body;
+    const { nom, prenom, email, password, telephone, whatsapp, adresse } = req.body;
     const [exist] = await db.query('SELECT id FROM clients WHERE email = ?', [email]);
     if (exist.length) return res.status(400).json({ message: 'Email déjà utilisé' });
 
@@ -48,12 +50,12 @@ exports.clientRegister = async (req, res) => {
     }
 
     await db.query(
-      'INSERT INTO clients (id_client, nom, prenom, email, password, telephone, adresse) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [id_client, nom, prenom, email, hashed, telephone, adresse]
+      'INSERT INTO clients (id_client, nom, prenom, email, password, telephone, whatsapp, adresse) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [id_client, nom, prenom, email, hashed, telephone, whatsapp || null, adresse]
     );
     res.status(201).json({ message: 'Inscription réussie. En attente de validation admin.', id_client });
   } catch (err) {
-    res.status(500).json({ message: 'Erreur serveur', error: err.message });
+    res.status(500).json({ message: 'Erreur serveur', error: getErrorMessage(err) });
   }
 };
 
@@ -71,7 +73,7 @@ exports.adminChangerPassword = async (req, res) => {
     await db.query('UPDATE admins SET password = ? WHERE id = ?', [hashed, req.user.id]);
     res.json({ message: 'Mot de passe modifié avec succès' });
   } catch (err) {
-    res.status(500).json({ message: 'Erreur serveur', error: err.message });
+    res.status(500).json({ message: 'Erreur serveur', error: getErrorMessage(err) });
   }
 };
 
@@ -82,7 +84,7 @@ exports.adminGetProfil = async (req, res) => {
     if (!rows.length) return res.status(404).json({ message: 'Admin introuvable' });
     res.json(rows[0]);
   } catch (err) {
-    res.status(500).json({ message: 'Erreur serveur', error: err.message });
+    res.status(500).json({ message: 'Erreur serveur', error: getErrorMessage(err) });
   }
 };
 
@@ -112,6 +114,6 @@ exports.clientLogin = async (req, res) => {
       user: { id: client.id, id_client: client.id_client, nom: client.nom, prenom: client.prenom, email: client.email, role: 'client' }
     });
   } catch (err) {
-    res.status(500).json({ message: 'Erreur serveur', error: err.message });
+    res.status(500).json({ message: 'Erreur serveur', error: getErrorMessage(err) });
   }
 };

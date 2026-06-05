@@ -5,7 +5,7 @@ import api from '../../api/axios'
 import {
   MdDirectionsCar, MdEventNote, MdReceipt, MdLogout,
   MdBuild, MdAdd, MdArrowForward, MdCheckCircle,
-  MdAccessTime, MdCancel, MdDescription
+  MdAccessTime, MdCancel, MdDescription, MdSettings, MdWarning
 } from 'react-icons/md'
 
 const statusConfig = {
@@ -66,6 +66,27 @@ const ClientDashboard = () => {
       </header>
 
       <div className="max-w-2xl mx-auto px-4 py-5 flex flex-col gap-4">
+
+        {profil && !profil.whatsapp && (
+          <Link to="/parametres" className="bg-green-50 border border-green-300 text-green-900 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+            <div className="flex-1">
+              <p className="font-bold">Ampidiro ny numéro WhatsApp anao</p>
+              <p className="text-sm">Mba handraisanao facture numérique sy validation automatique.</p>
+            </div>
+            <MdArrowForward size={20} className="shrink-0" />
+          </Link>
+        )}
+
+        <Link to="/urgence" className="bg-red-700 hover:bg-red-800 text-white rounded-2xl p-4 shadow-lg flex items-center gap-4">
+          <div className="w-13 h-13 bg-white/20 rounded-xl flex items-center justify-center shrink-0">
+            <MdWarning size={30} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-black text-lg leading-tight">Dépannage urgence</p>
+            <p className="text-sm text-red-100">Route nationale ou hors Antananarivo</p>
+          </div>
+          <MdArrowForward size={22} className="text-white/80 shrink-0" />
+        </Link>
 
         {/* Carte bienvenue */}
         <div className="bg-gradient-to-br from-primary to-blue-700 rounded-2xl p-5 text-white shadow-lg">
@@ -153,15 +174,15 @@ const ClientDashboard = () => {
             <MdArrowForward size={16} className="text-gray-300 group-hover:text-primary transition-colors shrink-0" />
           </Link>
 
-          <Link to="/rendezvous" className="bg-primary rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow flex items-center gap-3 group">
-            <div className="w-11 h-11 bg-white/20 rounded-xl flex items-center justify-center">
-              <MdAdd size={22} className="text-white" />
+          <Link to="/parametres" className="bg-white rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow flex items-center gap-3 group">
+            <div className="w-11 h-11 bg-gray-100 rounded-xl flex items-center justify-center group-hover:bg-gray-200 transition-colors">
+              <MdSettings size={22} className="text-gray-700" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-white text-sm">Nouveau RDV</p>
-              <p className="text-xs text-blue-200">Réserver</p>
+              <p className="font-semibold text-gray-800 text-sm">Paramètres</p>
+              <p className="text-xs text-gray-400">Compte</p>
             </div>
-            <MdArrowForward size={16} className="text-white/50 group-hover:text-white transition-colors shrink-0" />
+            <MdArrowForward size={16} className="text-gray-300 group-hover:text-primary transition-colors shrink-0" />
           </Link>
         </div>
 

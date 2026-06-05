@@ -1,0 +1,11 @@
+{
+  "appId": "mg.diagauto.client",
+  "appName": "DiagAuto Client",
+  "webDir": "../../web/dist-client",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

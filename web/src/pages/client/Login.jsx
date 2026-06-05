@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import ApiServerConfig from '../../components/ApiServerConfig'
 import api from '../../api/axios'
 import { toast } from 'react-toastify'
 import { MdDirectionsCar, MdBadge, MdLock, MdVisibility, MdVisibilityOff } from 'react-icons/md'
@@ -27,8 +28,11 @@ const ClientLogin = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4 overflow-hidden">
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md min-w-0 p-5 sm:p-8"
+        style={{ width: 'calc(100vw - 2rem)', maxWidth: '28rem' }}
+      >
 
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mx-auto mb-4">
@@ -49,14 +53,14 @@ const ClientLogin = () => {
               <MdBadge className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
               <input
                 type="text"
-                className="input pl-10 uppercase tracking-widest font-mono"
+                className="input pl-10 uppercase tracking-widest font-mono min-w-0"
                 placeholder="CLI-XXXXX"
                 value={form.id_client}
                 onChange={e => setForm({ ...form, id_client: e.target.value.toUpperCase() })}
                 required
               />
             </div>
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-xs text-gray-400 mt-1 break-words">
               Votre ID client vous a été fourni par l'administrateur après validation de votre compte.
             </p>
           </div>
@@ -102,6 +106,7 @@ const ClientLogin = () => {
               S'inscrire
             </Link>
           </p>
+          <ApiServerConfig compact />
         </div>
 
         <p className="text-center text-xs text-gray-300 mt-4">© DiagAuto Connect</p>

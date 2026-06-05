@@ -144,7 +144,6 @@ export default function FactureImprimer() {
             <div className="info-id">{f.immatriculation}</div>
             {f.annee   && <div className="info-ligne">Année : {f.annee}</div>}
             {f.couleur && <div className="info-ligne">Couleur : {f.couleur}</div>}
-            {f.energie && <div className="info-ligne">Énergie : {f.energie}</div>}
           </div>
         </section>
 

@@ -8,6 +8,9 @@
     "dev:client": "vite --config vite.client.config.js --port 3000",
     "build:admin": "vite build --config vite.admin.config.js",
     "build:client": "vite build --config vite.client.config.js",
+    "build:mobile:admin": "vite build --config vite.admin.config.js --mode mobile --base ./",
+    "build:mobile:client": "vite build --config vite.client.config.js --mode mobile --base ./",
+    "build:desktop:admin": "vite build --config vite.admin.config.js --mode desktop",
     "preview": "vite preview"
   },
   "dependencies": {

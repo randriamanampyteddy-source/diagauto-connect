@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../../components/AdminLayout'
 import api from '../../api/axios'
 import { toast } from 'react-toastify'
-import { MdAdd, MdDelete } from 'react-icons/md'
+import { MdAdd, MdDelete, MdPrint } from 'react-icons/md'
 
 const statusColors = {
   brouillon: 'bg-gray-100 text-gray-600',
@@ -15,6 +16,7 @@ const statusLabels = { brouillon: 'Brouillon', envoye: 'Envoyé', accepte: 'Acce
 const ligneVide = () => ({ description: '', quantite: 1, prix_unitaire: 0 })
 
 const Proforma = () => {
+  const navigate = useNavigate()
   const [items, setItems] = useState([])
   const [clients, setClients] = useState([])
   const [vehicules, setVehicules] = useState([])
@@ -69,6 +71,7 @@ const Proforma = () => {
               <th className="text-left px-4 py-3">Date</th>
               <th className="text-left px-4 py-3">Montant TTC</th>
               <th className="text-left px-4 py-3">Statut</th>
+              <th className="text-left px-4 py-3">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -80,9 +83,14 @@ const Proforma = () => {
                 <td className="px-4 py-3">{new Date(p.date_proforma).toLocaleDateString('fr-FR')}</td>
                 <td className="px-4 py-3 font-semibold">{Number(p.montant_ttc).toLocaleString()} Ar</td>
                 <td className="px-4 py-3"><span className={`badge ${statusColors[p.statut]}`}>{statusLabels[p.statut]}</span></td>
+                <td className="px-4 py-3">
+                  <button onClick={() => navigate(`/documents/proforma/${p.id}/imprimer`)} className="bg-primary hover:bg-blue-900 text-white text-xs py-1 px-2 rounded-xl flex items-center gap-1">
+                    <MdPrint size={13} /> Voir
+                  </button>
+                </td>
               </tr>
             ))}
-            {items.length === 0 && <tr><td colSpan={6} className="text-center py-8 text-gray-400">Aucun proforma</td></tr>}
+            {items.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-gray-400">Aucun proforma</td></tr>}
           </tbody>
         </table>
       </div>

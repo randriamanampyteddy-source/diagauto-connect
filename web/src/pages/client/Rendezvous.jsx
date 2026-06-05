@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../../api/axios'
 import { toast } from 'react-toastify'
-import { MdArrowBack, MdArrowBackIos, MdArrowForwardIos, MdAdd, MdDirectionsCar, MdAccessTime, MdCheckCircle, MdCancel } from 'react-icons/md'
+import { MdArrowBack, MdArrowBackIos, MdArrowForwardIos, MdAdd, MdDirectionsCar, MdAccessTime, MdCheckCircle, MdCancel, MdEditCalendar } from 'react-icons/md'
 
 const JOURS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam']
 const MOIS  = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']
@@ -32,6 +32,8 @@ const Rendezvous = () => {
   const [modal, setModal]       = useState(false)
   const [dateChoisie, setDateChoisie] = useState('')
   const [form, setForm]         = useState({ vehicule_id: '', heure_rdv: '', motif: '' })
+  const [reportModal, setReportModal] = useState(null)
+  const [reportForm, setReportForm] = useState({ date_rdv: '', heure_rdv: '' })
 
   const load = () => {
     api.get('/client/rendezvous').then(r => setRdvs(r.data)).catch(() => {})
@@ -77,18 +79,30 @@ const Rendezvous = () => {
   const estPasse  = (date) => date < toLocalDate(today)
   const estAujourd = (date) => date === toLocalDate(today)
 
+  const prochaineDateDisponible = (date) => {
+    const d = new Date(`${date}T12:00:00`)
+    for (let i = 1; i <= 90; i++) {
+      d.setDate(d.getDate() + 1)
+      const candidate = toLocalDate(d)
+      if (!estPlein(candidate)) return candidate
+    }
+    return ''
+  }
+
   const ouvrirModal = (date) => {
     if (estPasse(date)) return
     if (estPlein(date)) {
+      const suggestion = prochaineDateDisponible(date)
       toast.warning(
         <div>
           <p className="font-semibold">Date complète !</p>
           <p className="text-sm">Le {new Date(date+'T00:00').toLocaleDateString('fr-FR', {day:'numeric',month:'long'})} est complet (max {MAX_PAR_JOUR} véhicules).</p>
-          <p className="text-sm mt-1">Veuillez choisir une autre date.</p>
+          {suggestion && <p className="text-sm mt-1">Prochaine date disponible sélectionnée : <strong>{new Date(suggestion+'T00:00').toLocaleDateString('fr-FR')}</strong>.</p>}
         </div>,
-        { autoClose: 5000 }
+        { autoClose: 7000 }
       )
-      return
+      if (!suggestion) return
+      date = suggestion
     }
     setDateChoisie(date)
     setForm({ vehicule_id: '', heure_rdv: '', motif: '' })
@@ -103,7 +117,49 @@ const Rendezvous = () => {
       setModal(false)
       load()
     } catch (err) {
+      if (err.response?.status === 409 && err.response?.data?.suggested_date) {
+        const suggestion = err.response.data.suggested_date
+        setDateChoisie(suggestion)
+        toast.warning(`Date complète. Prochaine date disponible sélectionnée : ${new Date(suggestion+'T00:00').toLocaleDateString('fr-FR')}`)
+        load()
+        return
+      }
       toast.error(err.response?.data?.message || 'Erreur')
+    }
+  }
+
+  const annulerRdv = async (rdv) => {
+    if (!window.confirm('Annuler ce rendez-vous ?')) return
+    try {
+      await api.put(`/client/rendezvous/${rdv.id}/annuler`)
+      toast.success('Rendez-vous annulé')
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Annulation impossible')
+    }
+  }
+
+  const ouvrirReport = (rdv) => {
+    setReportModal(rdv)
+    setReportForm({ date_rdv: rdv.date_rdv?.slice(0, 10) || '', heure_rdv: String(rdv.heure_rdv || '').slice(0, 5) })
+  }
+
+  const reporterRdv = async (e) => {
+    e.preventDefault()
+    try {
+      await api.put(`/client/rendezvous/${reportModal.id}/reporter`, reportForm)
+      toast.success('Rendez-vous reporté et remis en attente')
+      setReportModal(null)
+      load()
+    } catch (err) {
+      if (err.response?.status === 409 && err.response?.data?.suggested_date) {
+        const suggestion = err.response.data.suggested_date
+        setReportForm(f => ({ ...f, date_rdv: suggestion }))
+        toast.warning(`Date complète. Prochaine date disponible sélectionnée : ${new Date(suggestion+'T00:00').toLocaleDateString('fr-FR')}`)
+        load()
+        return
+      }
+      toast.error(err.response?.data?.message || 'Report impossible')
     }
   }
 
@@ -171,7 +227,7 @@ const Rendezvous = () => {
           <h1 className="font-bold text-lg">Rendez-vous</h1>
         </div>
         <button
-          onClick={() => { setDateChoisie(toLocalDate(today)); setForm({ vehicule_id: '', heure_rdv: '', motif: '' }); setModal(true) }}
+          onClick={() => ouvrirModal(toLocalDate(today))}
           className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-3 py-2 rounded-xl text-sm transition-colors"
         >
           <MdAdd size={18} /> Nouveau
@@ -235,7 +291,7 @@ const Rendezvous = () => {
                 .filter(r => r.date_rdv?.slice(0,7) === `${annee}-${String(mois+1).padStart(2,'0')}`)
                 .sort((a,b) => a.date_rdv > b.date_rdv ? 1 : -1)
                 .map(r => (
-                  <div key={r.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5">
+                  <div key={r.id} className="flex flex-col sm:flex-row sm:items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5">
                     <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0
                       ${r.statut === 'confirme' ? 'bg-green-100' : r.statut === 'annule' ? 'bg-gray-100' : 'bg-orange-100'}`}>
                       <MdDirectionsCar size={18} className={
@@ -253,6 +309,16 @@ const Rendezvous = () => {
                       </p>
                       <p className="text-xs text-gray-400">{r.heure_rdv}</p>
                     </div>
+                    {['en_attente', 'confirme'].includes(r.statut) && (
+                      <div className="flex gap-2 sm:ml-2">
+                        <button onClick={() => ouvrirReport(r)} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1">
+                          <MdEditCalendar size={15} /> Reporter
+                        </button>
+                        <button onClick={() => annulerRdv(r)} className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1">
+                          <MdCancel size={15} /> Annuler
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))
               }
@@ -326,6 +392,51 @@ const Rendezvous = () => {
                 </button>
                 <button type="submit" className="flex-1 btn-primary py-2.5 text-center">
                   Confirmer
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {reportModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-5">
+            <h2 className="text-lg font-bold text-gray-800 mb-1">Reporter le rendez-vous</h2>
+            <p className="text-sm text-gray-500 mb-4">{reportModal.marque} {reportModal.modele} — {reportModal.immatriculation}</p>
+            <form onSubmit={reporterRdv} className="flex flex-col gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nouvelle date</label>
+                <input
+                  type="date"
+                  className="input"
+                  min={toLocalDate(today)}
+                  value={reportForm.date_rdv}
+                  onChange={e => setReportForm(f => ({ ...f, date_rdv: e.target.value }))}
+                  required
+                />
+                {reportForm.date_rdv && estPlein(reportForm.date_rdv) && reportForm.date_rdv !== reportModal.date_rdv?.slice(0, 10) && (
+                  <p className="text-xs text-red-600 mt-1">Cette date est complète. Une autre date sera proposée.</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nouvelle heure</label>
+                <input
+                  type="time"
+                  className="input"
+                  min="07:00"
+                  max="17:00"
+                  value={reportForm.heure_rdv}
+                  onChange={e => setReportForm(f => ({ ...f, heure_rdv: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="flex gap-3 mt-2">
+                <button type="button" onClick={() => setReportModal(null)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">
+                  Fermer
+                </button>
+                <button className="flex-1 btn-primary py-2.5 flex items-center justify-center gap-1">
+                  <MdEditCalendar size={17} /> Reporter
                 </button>
               </div>
             </form>

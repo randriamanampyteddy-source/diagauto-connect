@@ -1,6 +1,33 @@
 node_modules/
 .env
+.env.*
+!.env.example
+!.env.*.example
 dist/
 build/
+out/
 *.log
 .DS_Store
+
+# Local databases and generated release artifacts
+mysql-data/
+releases/
+
+# Frontend build output
+web/dist-admin/
+web/dist-client/
+
+# Desktop generated output
+desktop-admin/dist/
+desktop-admin/dist-windows/
+desktop-admin/release/
+
+# Mobile/Android generated output and machine-local files
+mobile/**/android/.gradle/
+mobile/**/android/app/build/
+mobile/**/android/capacitor-cordova-android-plugins/
+mobile/**/android/local.properties
+mobile/**/android/app/src/main/assets/
+mobile/**/android/app/src/main/res/xml/config.xml
+mobile/tools/
+mobile/android-commandlinetools.zip

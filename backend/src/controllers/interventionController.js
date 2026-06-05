@@ -18,6 +18,14 @@ exports.getAllInterventions = async (req, res) => {
 exports.creerIntervention = async (req, res) => {
   try {
     const { rendezvous_id, client_id, vehicule_id, description, technicien, date_debut } = req.body;
+    if (!client_id || !vehicule_id || !description || !String(description).trim()) {
+      return res.status(400).json({ message: 'Client, véhicule et réparation obligatoires' });
+    }
+    const [[vehicule]] = await db.query(
+      'SELECT id FROM vehicules WHERE id = ? AND client_id = ?',
+      [vehicule_id, client_id]
+    );
+    if (!vehicule) return res.status(404).json({ message: 'Véhicule introuvable pour ce client' });
     await db.query(
       'INSERT INTO interventions (rendezvous_id, client_id, vehicule_id, description, technicien, date_debut) VALUES (?, ?, ?, ?, ?, ?)',
       [rendezvous_id || null, client_id, vehicule_id, description, technicien, date_debut]

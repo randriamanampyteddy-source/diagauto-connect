@@ -9,6 +9,8 @@ const factureCtrl = require('../controllers/factureController');
 const dashCtrl = require('../controllers/dashboardController');
 const interCtrl = require('../controllers/interventionController');
 const atelierCtrl = require('../controllers/atelierController');
+const systemCtrl = require('../controllers/systemController');
+const urgenceCtrl = require('../controllers/urgenceController');
 
 // AUTH
 router.post('/auth/admin/login', authCtrl.adminLogin);
@@ -22,6 +24,7 @@ router.get('/admin/dashboard', verifyToken, isAdmin, dashCtrl.getStats);
 
 // ADMIN - Clients
 router.get('/admin/clients', verifyToken, isAdmin, clientCtrl.getAllClients);
+router.post('/admin/clients/sans-apk', verifyToken, isAdmin, clientCtrl.creerClientSansApk);
 router.put('/admin/clients/:id/valider', verifyToken, isAdmin, clientCtrl.validerClient);
 router.put('/admin/clients/:id/suspendre', verifyToken, isAdmin, clientCtrl.suspendreClient);
 router.get('/admin/clients/:id/vehicules', verifyToken, isAdmin, clientCtrl.getVehiculesClient);
@@ -29,6 +32,7 @@ router.post('/admin/clients/:id/reset-password', verifyToken, isAdmin, clientCtr
 
 // ADMIN - Rendez-vous
 router.get('/admin/rendezvous', verifyToken, isAdmin, rdvCtrl.getAllRdv);
+router.post('/admin/rendezvous', verifyToken, isAdmin, rdvCtrl.creerRdvAdmin);
 router.put('/admin/rendezvous/:id/statut', verifyToken, isAdmin, rdvCtrl.changerStatutRdv);
 
 // ADMIN - Interventions
@@ -44,6 +48,7 @@ router.put('/admin/devis/:id/statut', verifyToken, isAdmin, factureCtrl.changerS
 // ADMIN - Proforma
 router.post('/admin/proformas', verifyToken, isAdmin, factureCtrl.creerProforma);
 router.get('/admin/proformas', verifyToken, isAdmin, factureCtrl.getAllProformas);
+router.put('/admin/proformas/:id/statut', verifyToken, isAdmin, factureCtrl.changerStatutProforma);
 
 // ADMIN - Factures
 router.post('/admin/factures', verifyToken, isAdmin, factureCtrl.creerFacture);
@@ -52,6 +57,8 @@ router.put('/admin/factures/:id/paiement', verifyToken, isAdmin, factureCtrl.enr
 
 // CLIENT - Profil & Véhicules
 router.get('/client/profil', verifyToken, isClient, clientCtrl.getMonProfil);
+router.put('/client/profil', verifyToken, isClient, clientCtrl.updateMonProfil);
+router.put('/client/password', verifyToken, isClient, clientCtrl.changerMonPassword);
 router.get('/client/vehicules', verifyToken, isClient, clientCtrl.getMesVehicules);
 router.post('/client/vehicules', verifyToken, isClient, clientCtrl.ajouterVehicule);
 
@@ -59,6 +66,8 @@ router.post('/client/vehicules', verifyToken, isClient, clientCtrl.ajouterVehicu
 router.post('/client/rendezvous', verifyToken, isClient, rdvCtrl.creerRdv);
 router.get('/client/rendezvous', verifyToken, isClient, rdvCtrl.getMesRdv);
 router.get('/client/rendezvous/tous', verifyToken, isClient, rdvCtrl.getTousRdvActifs);
+router.put('/client/rendezvous/:id/annuler', verifyToken, isClient, rdvCtrl.annulerMonRdv);
+router.put('/client/rendezvous/:id/reporter', verifyToken, isClient, rdvCtrl.reporterMonRdv);
 
 // CLIENT - Interventions
 router.get('/client/interventions', verifyToken, isClient, interCtrl.getMesInterventions);
@@ -66,10 +75,32 @@ router.get('/client/interventions', verifyToken, isClient, interCtrl.getMesInter
 // CLIENT - Factures & Devis
 router.get('/client/factures', verifyToken, isClient, factureCtrl.getMesFactures);
 router.get('/client/devis', verifyToken, isClient, factureCtrl.getMesDevis);
+router.put('/client/devis/:id/statut', verifyToken, isClient, factureCtrl.changerStatutMonDevis);
+router.get('/client/proformas', verifyToken, isClient, factureCtrl.getMesProformas);
+router.put('/client/proformas/:id/statut', verifyToken, isClient, factureCtrl.changerStatutMaProforma);
+
+// URGENCES DEPANNAGE
+router.post('/client/urgences', verifyToken, isClient, urgenceCtrl.creerUrgence);
+router.get('/client/urgences', verifyToken, isClient, urgenceCtrl.getMesUrgences);
+router.get('/client/urgences/notifications/stats', verifyToken, isClient, urgenceCtrl.getMesNotificationsStats);
+router.put('/client/urgences/notifications/lire', verifyToken, isClient, urgenceCtrl.lireMesNotifications);
+router.get('/admin/urgences', verifyToken, isAdmin, urgenceCtrl.getAllUrgences);
+router.get('/admin/urgences/stats', verifyToken, isAdmin, urgenceCtrl.getUrgenceStats);
+router.put('/admin/urgences/:id', verifyToken, isAdmin, urgenceCtrl.repondreUrgence);
 
 // ATELIER CONFIG
 router.get('/admin/atelier', verifyToken, isAdmin, atelierCtrl.getConfig);
 router.put('/admin/atelier', verifyToken, isAdmin, atelierCtrl.updateConfig);
 router.get('/admin/factures/:id/imprimer', verifyToken, isAdmin, atelierCtrl.getFactureDetail);
+router.get('/admin/documents/:type/:id/imprimer', verifyToken, isAdmin, atelierCtrl.getAdminDocumentDetail);
+router.get('/client/documents/:type/:id/imprimer', verifyToken, isClient, atelierCtrl.getClientDocumentDetail);
+
+// SYSTEME
+router.get('/admin/systeme/stats', verifyToken, isAdmin, systemCtrl.getStats);
+router.get('/admin/systeme/whatsapp', verifyToken, isAdmin, systemCtrl.getWhatsAppStatus);
+router.post('/admin/systeme/whatsapp/verifier', verifyToken, isAdmin, systemCtrl.verifierWhatsApp);
+router.post('/admin/systeme/nettoyage', verifyToken, isAdmin, systemCtrl.nettoyer);
+router.post('/admin/systeme/reinitialiser', verifyToken, isAdmin, systemCtrl.reinitialiserAdmin);
+router.post('/client/systeme/reinitialiser', verifyToken, isClient, systemCtrl.reinitialiserClient);
 
 module.exports = router;

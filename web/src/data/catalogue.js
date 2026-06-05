@@ -493,17 +493,3 @@ export const CATALOGUE = {
 
 // Liste triée de toutes les marques
 export const MARQUES = Object.keys(CATALOGUE).sort((a, b) => a.localeCompare(b))
-
-// Carburants / Énergie
-export const ENERGIES = [
-  'Gasoil (Diesel)',
-  'Essence (Petrol)',
-  'Hybride (HEV)',
-  'Hybride rechargeable (PHEV)',
-  'Électrique (BEV)',
-  'GPL (LPG)',
-  'GNV (CNG)',
-  'Éthanol (E85)',
-  'Hydrogène',
-  'Bifuel (Essence + GPL)',
-]

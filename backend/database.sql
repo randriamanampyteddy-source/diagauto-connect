@@ -22,6 +22,7 @@ CREATE TABLE clients (
   email VARCHAR(150) UNIQUE NOT NULL,
   password VARCHAR(255) NOT NULL,
   telephone VARCHAR(20),
+  whatsapp VARCHAR(30),
   adresse TEXT,
   statut ENUM('en_attente', 'actif', 'suspendu') DEFAULT 'en_attente',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -144,6 +145,54 @@ CREATE TABLE lignes_document (
   montant DECIMAL(10,2) DEFAULT 0
 );
 
+-- Table Urgences depannage
+CREATE TABLE urgences_depannage (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  client_id INT NOT NULL,
+  telephone VARCHAR(50) NOT NULL,
+    localisation VARCHAR(255) NOT NULL,
+  zone ENUM('route_nationale', 'hors_antananarivo', 'antananarivo', 'autre') DEFAULT 'route_nationale',
+  message TEXT NOT NULL,
+  reponse_admin TEXT,
+  client_notification_non_lue BOOLEAN DEFAULT FALSE,
+  client_notification_version INT NOT NULL DEFAULT 0,
+  statut ENUM('nouveau', 'vu', 'en_cours', 'traite', 'annule') DEFAULT 'nouveau',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+);
+
+-- Historique des notifications WhatsApp automatiques
+CREATE TABLE notifications_whatsapp (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  client_id INT NOT NULL,
+  type VARCHAR(50) NOT NULL,
+  destinataire VARCHAR(30),
+  message TEXT NOT NULL,
+  statut ENUM('envoye', 'echec', 'configuration_manquante', 'numero_manquant') NOT NULL,
+  erreur TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+);
+
 -- Admin par défaut (password: admin123)
+CREATE TABLE atelier_config (
+  id INT PRIMARY KEY DEFAULT 1,
+  nom VARCHAR(150) DEFAULT 'DiagAuto Mada Service',
+  adresse TEXT,
+  telephone VARCHAR(100),
+  whatsapp VARCHAR(100),
+  email VARCHAR(150),
+  facebook VARCHAR(150),
+  site_web VARCHAR(150),
+  nif VARCHAR(100),
+  stat VARCHAR(100),
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+INSERT INTO atelier_config (id, nom, adresse, telephone, whatsapp, email, facebook) VALUES
+(1, 'DiagAuto Mada Service', '67ha Nord Ouest Antananarivo', '034 61 721 32 / 034 76 562 52', '037 79 111 66', 'diagautomadagascar@gmail.com', 'DiagAuto Mada')
+ON DUPLICATE KEY UPDATE id = id;
+
 INSERT INTO admins (nom, prenom, email, password, telephone) VALUES
 ('Admin', 'DiagAuto', 'admin@diagauto.mg', '$2a$10$rBV2JDeWW3.vKyeCtBNmUuGFKvKlYWmg3KdpK4LzZHoHo4SmW3mXW', '+261 34 00 000 00');

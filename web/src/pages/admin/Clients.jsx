@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import AdminLayout from '../../components/AdminLayout'
+import AdminQuickClientModal from '../../components/AdminQuickClientModal'
 import api from '../../api/axios'
 import { toast } from 'react-toastify'
-import { MdCheckCircle, MdBlock, MdSearch, MdLockReset, MdClose, MdContentCopy } from 'react-icons/md'
+import { MdCheckCircle, MdBlock, MdSearch, MdLockReset, MdClose, MdContentCopy, MdPersonAdd } from 'react-icons/md'
 
 const statusBadge = (statut) => {
   const map = {
@@ -18,6 +19,7 @@ const Clients = () => {
   const [clients, setClients] = useState([])
   const [search, setSearch] = useState('')
   const [resetModal, setResetModal] = useState(null) // { client, tempPwd }
+  const [quickClientModal, setQuickClientModal] = useState(false)
 
   const load = () => api.get('/admin/clients').then(r => setClients(r.data)).catch(() => {})
   useEffect(() => { load() }, [])
@@ -65,9 +67,14 @@ const Clients = () => {
     <AdminLayout>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Clients</h1>
-        <div className="relative">
-          <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-          <input className="input pl-9 w-64" placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} />
+        <div className="flex gap-3">
+          <div className="relative">
+            <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input className="input pl-9 w-64" placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          <button onClick={() => setQuickClientModal(true)} className="btn-primary flex items-center gap-2">
+            <MdPersonAdd size={18} /> Client sans APK
+          </button>
         </div>
       </div>
 
@@ -163,6 +170,12 @@ const Clients = () => {
           </div>
         </div>
       )}
+
+      <AdminQuickClientModal
+        open={quickClientModal}
+        onClose={() => setQuickClientModal(false)}
+        onCreated={load}
+      />
     </AdminLayout>
   )
 }

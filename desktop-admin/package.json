@@ -1,0 +1,88 @@
+{
+  "name": "diagauto-admin-desktop",
+  "version": "1.5.1",
+  "description": "DiagAuto Mada - Administration Windows",
+  "main": "main.js",
+  "author": "DiagAuto Mada",
+  "private": true,
+  "scripts": {
+    "build:web": "npm.cmd run build:desktop:admin --prefix ../web",
+    "build:backend": "node ../web/node_modules/esbuild/bin/esbuild ../backend/server.js --bundle --platform=node --format=cjs --outfile=backend-runtime/server.js",
+    "dist": "npm.cmd run build:web && npm.cmd run build:backend && npm.cmd run dist:installer && npm.cmd run dist:portable",
+    "dist:installer": "npm.cmd run build:web && npm.cmd run build:backend && electron-builder --win nsis",
+    "dist:portable": "npm.cmd run build:web && npm.cmd run build:backend && electron-builder --win portable --config.artifactName=DiagAuto-Admin-Portable-1.5.1-x64.exe",
+    "release:local": "npm.cmd run dist:installer && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish-local-update.ps1"
+  },
+  "devDependencies": {
+    "electron": "35.7.5",
+    "electron-builder": "26.0.12"
+  },
+  "build": {
+    "appId": "mg.diagauto.admin.desktop",
+    "productName": "DiagAuto Admin",
+    "artifactName": "DiagAuto-Admin-${version}-${arch}.${ext}",
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://api.diagautomada.com/updates"
+      }
+    ],
+    "directories": {
+      "output": "dist-windows"
+    },
+    "files": [
+      "main.js",
+      "package.json",
+      "cloud-runtime.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../web/dist-admin",
+        "to": "web"
+      },
+      {
+        "from": "backend-runtime",
+        "to": "backend",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../backend/.env",
+        "to": "backend/.env"
+      },
+      {
+        "from": "cloud-runtime.json",
+        "to": "cloud-runtime.json"
+      }
+    ],
+    "win": {
+      "icon": "../web/public-admin/icons/icon-512.png",
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "DiagAuto Admin"
+    }
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
+  }
+}

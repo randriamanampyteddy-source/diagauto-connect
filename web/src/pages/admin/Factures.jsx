@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../../components/AdminLayout'
+import AdminQuickClientModal from '../../components/AdminQuickClientModal'
 import api from '../../api/axios'
 import { toast } from 'react-toastify'
-import { MdAdd, MdDelete, MdPayment, MdPrint, MdSearch } from 'react-icons/md'
+import { MdAdd, MdDelete, MdPayment, MdPersonAdd, MdPrint, MdSearch } from 'react-icons/md'
+import { getWhatsAppWarning } from '../../utils/whatsapp'
 
 const statusColors = {
   non_payee:          'bg-red-100 text-red-700',
@@ -41,6 +43,7 @@ const Factures = () => {
   // Modal paiement
   const [paiementModal, setPaiementModal] = useState(null)
   const [montantPaye, setMontantPaye]     = useState('')
+  const [quickClientModal, setQuickClientModal] = useState(false)
 
   // ── Chargement ──────────────────────────────────────────────────────────────
   const load = () => {
@@ -59,6 +62,12 @@ const Factures = () => {
         setVehicules(data)
       } catch { toast.error('Impossible de charger les véhicules') }
     }
+  }
+
+  const onQuickClientCreated = ({ client, vehicule }) => {
+    setClients(current => [client, ...current])
+    setVehicules([vehicule])
+    setForm(current => ({ ...current, client_id: String(client.id), vehicule_id: String(vehicule.id) }))
   }
 
   // ── Mise à jour lignes ───────────────────────────────────────────────────────
@@ -104,8 +113,10 @@ const Factures = () => {
   // ── Enregistrer paiement ─────────────────────────────────────────────────────
   const enregistrerPaiement = async () => {
     try {
-      await api.put(`/admin/factures/${paiementModal.id}/paiement`, { montant_paye: Number(montantPaye) })
+      const { data } = await api.put(`/admin/factures/${paiementModal.id}/paiement`, { montant_paye: Number(montantPaye) })
       toast.success('Paiement enregistré')
+      const whatsappWarning = getWhatsAppWarning(data.whatsapp, 'Paiement validé')
+      if (whatsappWarning) toast.warning(whatsappWarning)
       setPaiementModal(null)
       load()
     } catch { toast.error('Erreur') }
@@ -210,7 +221,7 @@ const Factures = () => {
                 <td className="px-4 py-3"><span className={`badge ${statusColors[f.statut]}`}>{statusLabels[f.statut]}</span></td>
                 <td className="px-4 py-3">
                   <div className="flex gap-1.5 flex-wrap">
-                    <button onClick={() => navigate(`/factures/${f.id}/imprimer`)}
+                    <button onClick={() => navigate(`/documents/facture/${f.id}/imprimer`)}
                       className="bg-primary hover:bg-blue-900 text-white text-xs py-1 px-2 rounded-xl flex items-center gap-1 transition-colors">
                       <MdPrint size={13} /> Voir
                     </button>
@@ -235,7 +246,15 @@ const Factures = () => {
       {modal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-2xl p-6 max-h-[92vh] overflow-y-auto">
-            <h2 className="text-lg font-bold text-gray-800 mb-4">Nouvelle facture</h2>
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div>
+                <h2 className="text-lg font-bold text-gray-800">Nouvelle facture directe</h2>
+                <p className="text-xs text-gray-500">Sans rendez-vous et sans intervention obligatoire.</p>
+              </div>
+              <button type="button" onClick={() => setQuickClientModal(true)} className="text-primary font-semibold text-sm flex items-center gap-1">
+                <MdPersonAdd size={18} /> Nouveau client sans APK
+              </button>
+            </div>
 
             {/* Client + Véhicule */}
             <div className="grid grid-cols-2 gap-3 mb-4">
@@ -383,6 +402,12 @@ const Factures = () => {
           </div>
         </div>
       )}
+
+      <AdminQuickClientModal
+        open={quickClientModal}
+        onClose={() => setQuickClientModal(false)}
+        onCreated={onQuickClientCreated}
+      />
     </AdminLayout>
   )
 }

@@ -5,7 +5,7 @@ import { toast } from 'react-toastify'
 import { MdDirectionsCar } from 'react-icons/md'
 
 const Register = () => {
-  const [form, setForm] = useState({ nom: '', prenom: '', email: '', password: '', telephone: '', adresse: '' })
+  const [form, setForm] = useState({ nom: '', prenom: '', email: '', password: '', telephone: '', whatsapp: '', adresse: '' })
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(null)
   const navigate = useNavigate()
@@ -79,6 +79,14 @@ const Register = () => {
             <input className="input" value={form.telephone} onChange={e => setForm({ ...form, telephone: e.target.value })} />
           </div>
           <div>
+            <label className="block text-sm font-medium mb-1">Numéro WhatsApp *</label>
+            <input className="input" value={form.whatsapp} onChange={e => setForm({ ...form, whatsapp: e.target.value })} placeholder="Ex: 034 00 000 00" required />
+          </div>
+          <div className="col-span-2 bg-green-50 border border-green-200 rounded-xl p-3">
+            <p className="text-sm font-semibold text-green-800">Notifications WhatsApp automatiques</p>
+            <p className="text-xs text-green-700 mt-1">Ce numéro recevra vos validations de rendez-vous, paiements confirmés et factures numériques.</p>
+          </div>
+          <div className="col-span-2">
             <label className="block text-sm font-medium mb-1">Adresse</label>
             <input className="input" value={form.adresse} onChange={e => setForm({ ...form, adresse: e.target.value })} />
           </div>

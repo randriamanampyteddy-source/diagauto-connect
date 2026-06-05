@@ -2,31 +2,36 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../../api/axios'
 import { toast } from 'react-toastify'
-import { MdDirectionsCar, MdAdd, MdArrowBack, MdLocalGasStation } from 'react-icons/md'
-import { CATALOGUE, MARQUES, ENERGIES } from '../../data/catalogue'
+import { MdDirectionsCar, MdAdd, MdArrowBack } from 'react-icons/md'
+import { CATALOGUE, MARQUES } from '../../data/catalogue'
+
+const emptyForm = {
+  marque: '',
+  modele: '',
+  annee: '',
+  immatriculation: '',
+  couleur: '',
+}
 
 const Vehicules = () => {
   const [vehicules, setVehicules] = useState([])
-  const [modal, setModal]         = useState(false)
-  const [form, setForm]           = useState({
-    marque: '', modele: '', annee: '', immatriculation: '', couleur: '', energie: ''
-  })
+  const [modal, setModal] = useState(false)
+  const [form, setForm] = useState(emptyForm)
 
   const load = () => api.get('/client/vehicules').then(r => setVehicules(r.data))
+
   useEffect(() => { load() }, [])
 
-  // Modèles selon marque choisie (ou tous si marque non reconnue)
   const modelesSuggeres = CATALOGUE[form.marque] || []
-
   const set = (field, val) => setForm(f => ({ ...f, [field]: val }))
 
   const ajouter = async (e) => {
     e.preventDefault()
     try {
       await api.post('/client/vehicules', form)
-      toast.success('Véhicule ajouté !')
+      toast.success('Vehicule ajoute')
       setModal(false)
-      setForm({ marque: '', modele: '', annee: '', immatriculation: '', couleur: '', energie: '' })
+      setForm(emptyForm)
       load()
     } catch (err) {
       toast.error(err.response?.data?.message || 'Erreur')
@@ -40,7 +45,7 @@ const Vehicules = () => {
           <Link to="/dashboard" className="p-2 rounded-xl hover:bg-white/10 transition-colors">
             <MdArrowBack size={20} />
           </Link>
-          <h1 className="font-bold text-lg">Mes véhicules</h1>
+          <h1 className="font-bold text-lg">Mes vehicules</h1>
         </div>
         <button
           onClick={() => setModal(true)}
@@ -61,13 +66,8 @@ const Vehicules = () => {
                 <h3 className="font-bold text-gray-800">{v.marque} {v.modele}</h3>
                 <p className="text-sm font-mono text-primary font-semibold">{v.immatriculation}</p>
                 <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
-                  {v.annee   && <span className="text-xs text-gray-400">{v.annee}</span>}
+                  {v.annee && <span className="text-xs text-gray-400">{v.annee}</span>}
                   {v.couleur && <span className="text-xs text-gray-400">{v.couleur}</span>}
-                  {v.energie && (
-                    <span className="text-xs text-gray-500 flex items-center gap-1">
-                      <MdLocalGasStation size={11} />{v.energie}
-                    </span>
-                  )}
                 </div>
               </div>
             </div>
@@ -75,21 +75,18 @@ const Vehicules = () => {
           {vehicules.length === 0 && (
             <div className="col-span-2 text-center py-16 text-gray-300">
               <MdDirectionsCar size={52} className="mx-auto mb-3 opacity-30" />
-              <p className="text-sm">Aucun véhicule enregistré</p>
+              <p className="text-sm">Aucun vehicule enregistre</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* ── Modal ajout véhicule ── */}
       {modal && (
         <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-md p-5 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-bold text-gray-800 mb-4">Ajouter un véhicule</h2>
+            <h2 className="text-lg font-bold text-gray-800 mb-4">Ajouter un vehicule</h2>
 
             <form onSubmit={ajouter} className="flex flex-col gap-3">
-
-              {/* Marque — datalist */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Marque *</label>
                 <input
@@ -105,9 +102,8 @@ const Vehicules = () => {
                 </datalist>
               </div>
 
-              {/* Modèle — datalist filtré par marque */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Modèle *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Modele *</label>
                 <input
                   list="liste-modeles"
                   className="input"
@@ -126,7 +122,6 @@ const Vehicules = () => {
                 )}
               </div>
 
-              {/* Immatriculation — libre */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Immatriculation *</label>
                 <input
@@ -138,23 +133,9 @@ const Vehicules = () => {
                 />
               </div>
 
-              {/* Énergie — select */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Énergie / Carburant</label>
-                <select
-                  className="input"
-                  value={form.energie}
-                  onChange={e => set('energie', e.target.value)}
-                >
-                  <option value="">— Choisir —</option>
-                  {ENERGIES.map(e => <option key={e} value={e}>{e}</option>)}
-                </select>
-              </div>
-
-              {/* Année + Couleur */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Année</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Annee</label>
                   <input
                     type="number"
                     className="input"

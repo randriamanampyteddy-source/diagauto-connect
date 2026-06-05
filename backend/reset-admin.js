@@ -10,7 +10,21 @@ require('dotenv').config();
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
   });
-  await db.query('UPDATE admins SET password = ? WHERE email = ?', [hash, 'admin@diagauto.mg']);
-  console.log('✓ Password reset: admin@diagauto.mg / admin123');
+
+  await db.query(
+    `INSERT INTO admins (nom, prenom, email, password, telephone)
+     VALUES (?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       password = VALUES(password),
+       nom = VALUES(nom),
+       prenom = VALUES(prenom),
+       telephone = VALUES(telephone)`,
+    ['Admin', 'DiagAuto', 'admin@diagauto.mg', hash, '+261 34 00 000 00']
+  );
+
+  const [rows] = await db.query('SELECT id, email FROM admins WHERE email = ?', ['admin@diagauto.mg']);
+  console.log('Admin rows:', rows);
+  console.log('Password reset: admin@diagauto.mg / admin123');
+
   await db.end();
 })();

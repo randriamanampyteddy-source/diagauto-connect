@@ -12,6 +12,9 @@ import Proforma from './pages/admin/Proforma'
 import Factures from './pages/admin/Factures'
 import MonCompte from './pages/admin/MonCompte'
 import FactureImprimer from './pages/admin/FactureImprimer'
+import DocumentImprimer from './pages/DocumentImprimer'
+import Parametres from './pages/admin/Parametres'
+import Urgences from './pages/admin/Urgences'
 
 function AppAdmin() {
   return (
@@ -25,11 +28,14 @@ function AppAdmin() {
           <Route path="/clients"       element={<PrivateRoute role="admin"><Clients /></PrivateRoute>} />
           <Route path="/rendezvous"    element={<PrivateRoute role="admin"><Rendezvous /></PrivateRoute>} />
           <Route path="/interventions" element={<PrivateRoute role="admin"><Interventions /></PrivateRoute>} />
+          <Route path="/urgences"      element={<PrivateRoute role="admin"><Urgences /></PrivateRoute>} />
           <Route path="/devis"         element={<PrivateRoute role="admin"><Devis /></PrivateRoute>} />
           <Route path="/proformas"     element={<PrivateRoute role="admin"><Proforma /></PrivateRoute>} />
           <Route path="/factures"      element={<PrivateRoute role="admin"><Factures /></PrivateRoute>} />
+          <Route path="/parametres"    element={<PrivateRoute role="admin"><Parametres /></PrivateRoute>} />
           <Route path="/mon-compte"    element={<PrivateRoute role="admin"><MonCompte /></PrivateRoute>} />
           <Route path="/factures/:id/imprimer" element={<PrivateRoute role="admin"><FactureImprimer /></PrivateRoute>} />
+          <Route path="/documents/:type/:id/imprimer" element={<PrivateRoute role="admin"><DocumentImprimer scope="admin" /></PrivateRoute>} />
 
           <Route path="*" element={<Navigate to="/login" />} />
         </Routes>
