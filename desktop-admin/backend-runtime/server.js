@@ -54295,6 +54295,36 @@ var require_factureController = __commonJS({
         res.status(500).json({ message: "Erreur serveur", error: err.message });
       }
     };
+    exports2.envoyerFacture = async (req, res) => {
+      try {
+        const { id } = req.params;
+        const [[f]] = await db2.query(
+          `SELECT f.client_id, f.numero_facture, f.montant_ttc, f.montant_paye, f.statut,
+              v.marque, v.modele, v.immatriculation
+       FROM factures f JOIN vehicules v ON f.vehicule_id = v.id
+       WHERE f.id = ?`,
+          [id]
+        );
+        if (!f) return res.status(404).json({ message: "Facture introuvable" });
+        const reste = Number(f.montant_ttc) - Number(f.montant_paye || 0);
+        const whatsapp = await envoyerWhatsAppClient({
+          clientId: f.client_id,
+          type: "facture_envoi",
+          message: `DiagAuto Mada
+Facture disponible.
+Facture : ${f.numero_facture}
+Vehicule : ${f.marque} ${f.modele} (${f.immatriculation})
+Total : ${Number(f.montant_ttc).toLocaleString("fr-FR")} Ar
+Deja paye : ${Number(f.montant_paye || 0).toLocaleString("fr-FR")} Ar
+Reste : ${Math.max(0, reste).toLocaleString("fr-FR")} Ar
+Statut : ${String(f.statut || "").replaceAll("_", " ")}
+${getAccesFactureClient(id)}`
+        });
+        res.json({ message: "Facture prete a envoyer", whatsapp });
+      } catch (err) {
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+      }
+    };
     exports2.enregistrerPaiement = async (req, res) => {
       try {
         const { id } = req.params;
@@ -54999,6 +55029,7 @@ var require_routes = __commonJS({
     router.put("/admin/proformas/:id/statut", verifyToken, isAdmin, factureCtrl.changerStatutProforma);
     router.post("/admin/factures", verifyToken, isAdmin, factureCtrl.creerFacture);
     router.get("/admin/factures", verifyToken, isAdmin, factureCtrl.getAllFactures);
+    router.post("/admin/factures/:id/envoyer", verifyToken, isAdmin, factureCtrl.envoyerFacture);
     router.put("/admin/factures/:id/paiement", verifyToken, isAdmin, factureCtrl.enregistrerPaiement);
     router.get("/client/profil", verifyToken, isClient, clientCtrl.getMonProfil);
     router.put("/client/profil", verifyToken, isClient, clientCtrl.updateMonProfil);

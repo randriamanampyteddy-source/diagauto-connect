@@ -53,6 +53,7 @@ router.put('/admin/proformas/:id/statut', verifyToken, isAdmin, factureCtrl.chan
 // ADMIN - Factures
 router.post('/admin/factures', verifyToken, isAdmin, factureCtrl.creerFacture);
 router.get('/admin/factures', verifyToken, isAdmin, factureCtrl.getAllFactures);
+router.post('/admin/factures/:id/envoyer', verifyToken, isAdmin, factureCtrl.envoyerFacture);
 router.put('/admin/factures/:id/paiement', verifyToken, isAdmin, factureCtrl.enregistrerPaiement);
 
 // CLIENT - Profil & Véhicules

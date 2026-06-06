@@ -4,7 +4,7 @@ import AdminLayout from '../../components/AdminLayout'
 import AdminQuickClientModal from '../../components/AdminQuickClientModal'
 import api from '../../api/axios'
 import { toast } from 'react-toastify'
-import { MdAdd, MdDelete, MdPayment, MdPersonAdd, MdPrint, MdSearch } from 'react-icons/md'
+import { MdAdd, MdDelete, MdPayment, MdPersonAdd, MdPrint, MdSearch, MdSend } from 'react-icons/md'
 import { getWhatsAppWarning, ouvrirWhatsAppManuel } from '../../utils/whatsapp'
 
 const statusColors = {
@@ -44,6 +44,7 @@ const Factures = () => {
   const [paiementModal, setPaiementModal] = useState(null)
   const [montantPaye, setMontantPaye]     = useState('')
   const [quickClientModal, setQuickClientModal] = useState(false)
+  const [sendingId, setSendingId] = useState(null)
 
   // ── Chargement ──────────────────────────────────────────────────────────────
   const load = () => {
@@ -121,6 +122,24 @@ const Factures = () => {
       setPaiementModal(null)
       load()
     } catch { toast.error('Erreur') }
+  }
+
+  const envoyerFacture = async (facture) => {
+    try {
+      setSendingId(facture.id)
+      const { data } = await api.post(`/admin/factures/${facture.id}/envoyer`)
+      const whatsappWarning = getWhatsAppWarning(data.whatsapp, 'Facture prete a envoyer')
+      if (whatsappWarning) toast.warning(whatsappWarning)
+      if (ouvrirWhatsAppManuel(data.whatsapp)) {
+        toast.info('WhatsApp ouvert pour envoyer la facture au client')
+      } else if (!whatsappWarning) {
+        toast.success('Facture envoyee au client')
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Impossible d envoyer la facture')
+    } finally {
+      setSendingId(null)
+    }
   }
 
   // ── Filtrage ─────────────────────────────────────────────────────────────────
@@ -225,6 +244,11 @@ const Factures = () => {
                     <button onClick={() => navigate(`/documents/facture/${f.id}/imprimer`)}
                       className="bg-primary hover:bg-blue-900 text-white text-xs py-1 px-2 rounded-xl flex items-center gap-1 transition-colors">
                       <MdPrint size={13} /> Voir
+                    </button>
+                    <button onClick={() => envoyerFacture(f)}
+                      disabled={sendingId === f.id}
+                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs py-1 px-2 rounded-xl flex items-center gap-1 transition-colors">
+                      <MdSend size={13} /> {sendingId === f.id ? 'Envoi...' : 'Envoyer'}
                     </button>
                     {f.statut !== 'payee' && (
                       <button onClick={() => { setPaiementModal(f); setMontantPaye(f.montant_ttc) }}

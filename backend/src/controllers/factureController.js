@@ -234,6 +234,30 @@ exports.getMesFactures = async (req, res) => {
   }
 };
 
+exports.envoyerFacture = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [[f]] = await db.query(
+      `SELECT f.client_id, f.numero_facture, f.montant_ttc, f.montant_paye, f.statut,
+              v.marque, v.modele, v.immatriculation
+       FROM factures f JOIN vehicules v ON f.vehicule_id = v.id
+       WHERE f.id = ?`,
+      [id]
+    );
+    if (!f) return res.status(404).json({ message: 'Facture introuvable' });
+
+    const reste = Number(f.montant_ttc) - Number(f.montant_paye || 0);
+    const whatsapp = await envoyerWhatsAppClient({
+      clientId: f.client_id,
+      type: 'facture_envoi',
+      message: `DiagAuto Mada\nFacture disponible.\nFacture : ${f.numero_facture}\nVehicule : ${f.marque} ${f.modele} (${f.immatriculation})\nTotal : ${Number(f.montant_ttc).toLocaleString('fr-FR')} Ar\nDeja paye : ${Number(f.montant_paye || 0).toLocaleString('fr-FR')} Ar\nReste : ${Math.max(0, reste).toLocaleString('fr-FR')} Ar\nStatut : ${String(f.statut || '').replaceAll('_', ' ')}\n${getAccesFactureClient(id)}`,
+    });
+    res.json({ message: 'Facture prete a envoyer', whatsapp });
+  } catch (err) {
+    res.status(500).json({ message: 'Erreur serveur', error: err.message });
+  }
+};
+
 exports.enregistrerPaiement = async (req, res) => {
   try {
     const { id } = req.params;
