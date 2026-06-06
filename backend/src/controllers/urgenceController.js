@@ -1,5 +1,6 @@
 const db = require('../config/db');
-const { envoyerWhatsAppClient } = require('../services/whatsappService');
+
+let urgenceMessagesReady = false;
 
 const parseLocalisation = (value) => {
   try {
@@ -24,11 +25,80 @@ const enrichirUrgence = (urgence) => ({
   gps: parseLocalisation(urgence.localisation),
 });
 
+const ensureUrgenceMessagesTable = async () => {
+  if (urgenceMessagesReady) return;
+
+  if (db.type === 'postgres') {
+    await db.query(
+      `CREATE TABLE IF NOT EXISTS urgence_messages (
+        id SERIAL PRIMARY KEY,
+        urgence_id INT NOT NULL REFERENCES urgences_depannage(id) ON DELETE CASCADE,
+        client_id INT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+        expediteur VARCHAR(20) NOT NULL,
+        message TEXT NOT NULL,
+        lu_client BOOLEAN DEFAULT FALSE,
+        lu_admin BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`
+    );
+  } else {
+    await db.query(
+      `CREATE TABLE IF NOT EXISTS urgence_messages (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        urgence_id INT NOT NULL,
+        client_id INT NOT NULL,
+        expediteur VARCHAR(20) NOT NULL,
+        message TEXT NOT NULL,
+        lu_client BOOLEAN DEFAULT FALSE,
+        lu_admin BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (urgence_id) REFERENCES urgences_depannage(id) ON DELETE CASCADE,
+        FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+      )`
+    );
+  }
+
+  urgenceMessagesReady = true;
+};
+
+const getUrgenceForClient = async (id, clientId) => {
+  const [[urgence]] = await db.query(
+    'SELECT * FROM urgences_depannage WHERE id = ? AND client_id = ?',
+    [id, clientId]
+  );
+  return urgence;
+};
+
+const getUrgenceForAdmin = async (id) => {
+  const [[urgence]] = await db.query(
+    'SELECT * FROM urgences_depannage WHERE id = ?',
+    [id]
+  );
+  return urgence;
+};
+
+const ajouterMessageUrgence = async ({ urgenceId, clientId, expediteur, message }) => {
+  await ensureUrgenceMessagesTable();
+  await db.query(
+    `INSERT INTO urgence_messages
+     (urgence_id, client_id, expediteur, message, lu_client, lu_admin)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      urgenceId,
+      clientId,
+      expediteur,
+      message,
+      expediteur === 'client',
+      expediteur === 'admin',
+    ]
+  );
+};
+
 exports.creerUrgence = async (req, res) => {
   try {
     const { telephone, latitude, longitude, precision, zone, message } = req.body;
     if (!telephone || !String(telephone).trim()) {
-      return res.status(400).json({ message: 'Numéro téléphone obligatoire' });
+      return res.status(400).json({ message: 'Numero telephone obligatoire' });
     }
 
     const lat = Number(latitude);
@@ -51,7 +121,7 @@ exports.creerUrgence = async (req, res) => {
        VALUES (?, ?, ?, ?, ?)`,
       [req.user.id, telephone, localisation, zone || 'route_nationale', message]
     );
-    res.status(201).json({ message: 'Urgence envoyée', id: result.insertId });
+    res.status(201).json({ message: 'Urgence envoyee', id: result.insertId });
   } catch (err) {
     res.status(500).json({ message: 'Erreur serveur', error: err.message });
   }
@@ -74,6 +144,7 @@ exports.getMesUrgences = async (req, res) => {
 
 exports.getMesNotificationsStats = async (req, res) => {
   try {
+    await ensureUrgenceMessagesTable();
     const [[row]] = await db.query(
       `SELECT COUNT(*) AS non_lues, MAX(updated_at) AS derniere_notification,
               SUM(client_notification_version) AS notification_version
@@ -81,10 +152,16 @@ exports.getMesNotificationsStats = async (req, res) => {
        WHERE client_id = ? AND client_notification_non_lue = TRUE`,
       [req.user.id]
     );
+    const [[messages]] = await db.query(
+      `SELECT COUNT(*) AS messages_non_lus, MAX(created_at) AS derniere_message
+       FROM urgence_messages
+       WHERE client_id = ? AND expediteur = 'admin' AND lu_client = FALSE`,
+      [req.user.id]
+    );
     res.json({
-      non_lues: Number(row.non_lues) || 0,
-      derniere_notification: row.derniere_notification || null,
-      notification_version: Number(row.notification_version) || 0,
+      non_lues: Number(row.non_lues) || Number(messages.messages_non_lus) || 0,
+      derniere_notification: messages.derniere_message || row.derniere_notification || null,
+      notification_version: Number(row.notification_version) || Number(messages.messages_non_lus) || 0,
     });
   } catch (err) {
     res.status(500).json({ message: 'Erreur serveur', error: err.message });
@@ -93,8 +170,13 @@ exports.getMesNotificationsStats = async (req, res) => {
 
 exports.lireMesNotifications = async (req, res) => {
   try {
+    await ensureUrgenceMessagesTable();
     await db.query(
       'UPDATE urgences_depannage SET client_notification_non_lue = FALSE WHERE client_id = ?',
+      [req.user.id]
+    );
+    await db.query(
+      'UPDATE urgence_messages SET lu_client = TRUE WHERE client_id = ?',
       [req.user.id]
     );
     res.json({ message: 'Notifications lues' });
@@ -145,10 +227,7 @@ exports.repondreUrgence = async (req, res) => {
       return res.status(400).json({ message: 'Statut invalide' });
     }
 
-    const [[urgence]] = await db.query(
-      'SELECT client_id, statut FROM urgences_depannage WHERE id = ?',
-      [id]
-    );
+    const urgence = await getUrgenceForAdmin(id);
     if (!urgence) return res.status(404).json({ message: 'Urgence introuvable' });
 
     const reponse = reponse_admin && String(reponse_admin).trim();
@@ -163,18 +242,112 @@ exports.repondreUrgence = async (req, res) => {
       [reponse || null, statut || null, notifierClient, notifierClient, id]
     );
 
-    let whatsapp = null;
-    if (notifierClient) {
-      const detail = reponse
-        ? `Réponse de l’admin : ${reponse}`
-        : `Statut de votre urgence : ${statut.replaceAll('_', ' ')}`;
-      whatsapp = await envoyerWhatsAppClient({
+    if (reponse) {
+      await ajouterMessageUrgence({
+        urgenceId: id,
         clientId: urgence.client_id,
-        type: 'urgence_reponse_admin',
-        message: `DiagAuto Mada\nMise à jour de votre demande de dépannage urgence.\n${detail}\nOuvrez l’application Client pour voir le détail.`,
+        expediteur: 'admin',
+        message: reponse,
       });
     }
-    res.json({ message: 'Urgence mise à jour', whatsapp });
+
+    res.json({ message: 'Urgence mise a jour' });
+  } catch (err) {
+    res.status(500).json({ message: 'Erreur serveur', error: err.message });
+  }
+};
+
+exports.getMessagesUrgenceClient = async (req, res) => {
+  try {
+    await ensureUrgenceMessagesTable();
+    const urgence = await getUrgenceForClient(req.params.id, req.user.id);
+    if (!urgence) return res.status(404).json({ message: 'Urgence introuvable' });
+    await db.query(
+      'UPDATE urgence_messages SET lu_client = TRUE WHERE urgence_id = ? AND client_id = ?',
+      [req.params.id, req.user.id]
+    );
+    await db.query(
+      'UPDATE urgences_depannage SET client_notification_non_lue = FALSE WHERE id = ? AND client_id = ?',
+      [req.params.id, req.user.id]
+    );
+    const [rows] = await db.query(
+      `SELECT id, expediteur, message, lu_client, lu_admin, created_at
+       FROM urgence_messages
+       WHERE urgence_id = ? AND client_id = ?
+       ORDER BY created_at ASC, id ASC`,
+      [req.params.id, req.user.id]
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ message: 'Erreur serveur', error: err.message });
+  }
+};
+
+exports.envoyerMessageUrgenceClient = async (req, res) => {
+  try {
+    const message = String(req.body.message || '').trim();
+    if (!message) return res.status(400).json({ message: 'Message obligatoire' });
+    const urgence = await getUrgenceForClient(req.params.id, req.user.id);
+    if (!urgence) return res.status(404).json({ message: 'Urgence introuvable' });
+    await ajouterMessageUrgence({
+      urgenceId: req.params.id,
+      clientId: req.user.id,
+      expediteur: 'client',
+      message,
+    });
+    if (urgence.statut === 'nouveau') {
+      await db.query('UPDATE urgences_depannage SET statut = ? WHERE id = ?', ['vu', req.params.id]);
+    }
+    res.status(201).json({ message: 'Message envoye' });
+  } catch (err) {
+    res.status(500).json({ message: 'Erreur serveur', error: err.message });
+  }
+};
+
+exports.getMessagesUrgenceAdmin = async (req, res) => {
+  try {
+    await ensureUrgenceMessagesTable();
+    const urgence = await getUrgenceForAdmin(req.params.id);
+    if (!urgence) return res.status(404).json({ message: 'Urgence introuvable' });
+    await db.query(
+      'UPDATE urgence_messages SET lu_admin = TRUE WHERE urgence_id = ?',
+      [req.params.id]
+    );
+    const [rows] = await db.query(
+      `SELECT id, expediteur, message, lu_client, lu_admin, created_at
+       FROM urgence_messages
+       WHERE urgence_id = ?
+       ORDER BY created_at ASC, id ASC`,
+      [req.params.id]
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ message: 'Erreur serveur', error: err.message });
+  }
+};
+
+exports.envoyerMessageUrgenceAdmin = async (req, res) => {
+  try {
+    const message = String(req.body.message || '').trim();
+    if (!message) return res.status(400).json({ message: 'Message obligatoire' });
+    const urgence = await getUrgenceForAdmin(req.params.id);
+    if (!urgence) return res.status(404).json({ message: 'Urgence introuvable' });
+    await ajouterMessageUrgence({
+      urgenceId: req.params.id,
+      clientId: urgence.client_id,
+      expediteur: 'admin',
+      message,
+    });
+    await db.query(
+      `UPDATE urgences_depannage
+       SET reponse_admin = ?,
+           statut = CASE WHEN statut = 'nouveau' THEN 'en_cours' ELSE statut END,
+           client_notification_non_lue = TRUE,
+           client_notification_version = client_notification_version + 1
+       WHERE id = ?`,
+      [message, req.params.id]
+    );
+    res.status(201).json({ message: 'Message envoye' });
   } catch (err) {
     res.status(500).json({ message: 'Erreur serveur', error: err.message });
   }

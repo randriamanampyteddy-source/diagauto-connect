@@ -173,10 +173,23 @@ CREATE TABLE urgences_depannage (
   statut ENUM('nouveau', 'vu', 'en_cours', 'traite', 'annule') DEFAULT 'nouveau',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
-);
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+  );
 
--- Historique des notifications WhatsApp automatiques
+CREATE TABLE urgence_messages (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    urgence_id INT NOT NULL,
+    client_id INT NOT NULL,
+    expediteur VARCHAR(20) NOT NULL,
+    message TEXT NOT NULL,
+    lu_client BOOLEAN DEFAULT FALSE,
+    lu_admin BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (urgence_id) REFERENCES urgences_depannage(id) ON DELETE CASCADE,
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+  );
+  
+  -- Historique des notifications WhatsApp automatiques
 CREATE TABLE notifications_whatsapp (
   id INT AUTO_INCREMENT PRIMARY KEY,
   client_id INT NOT NULL,

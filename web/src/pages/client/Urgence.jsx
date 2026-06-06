@@ -1,18 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import api from '../../api/axios'
 import { playUrgenceSound } from '../../utils/alertSound'
-import { MdArrowBack, MdCall, MdLocationOn, MdMyLocation, MdNotifications, MdSend, MdWarning } from 'react-icons/md'
+import { MdArrowBack, MdCall, MdLocationOn, MdMyLocation, MdSend, MdWarning } from 'react-icons/md'
 
 const ADMIN_PHONE = '0346172132'
 
 const statusLabels = {
-  nouveau: 'Envoyée',
+  nouveau: 'Envoyee',
   vu: 'Vue par admin',
   en_cours: 'En cours',
-  traite: 'Traitée',
-  annule: 'Annulée',
+  traite: 'Traitee',
+  annule: 'Annulee',
 }
 
 const UrgenceClient = () => {
@@ -25,10 +25,44 @@ const UrgenceClient = () => {
     message: '',
   })
   const [items, setItems] = useState([])
+  const [messages, setMessages] = useState({})
+  const [reply, setReply] = useState({})
+  const [activeId, setActiveId] = useState(null)
   const [loading, setLoading] = useState(false)
   const [localisationStatus, setLocalisationStatus] = useState('chargement')
+  const loadingRef = useRef(false)
+  const activeIdRef = useRef(null)
 
-  const load = () => api.get('/client/urgences').then(r => setItems(r.data)).catch(() => {})
+  const load = async ({ silent = true } = {}) => {
+    if (loadingRef.current) return
+    loadingRef.current = true
+    try {
+      const { data } = await api.get('/client/urgences')
+      setItems(data)
+      const selected = activeIdRef.current || data[0]?.id || null
+      if (selected) {
+        activeIdRef.current = selected
+        setActiveId(selected)
+        await loadMessages(selected)
+      }
+      if (data.some(item => Boolean(item.client_notification_non_lue))) {
+        await api.put('/client/urgences/notifications/lire')
+      }
+    } catch {
+      if (!silent) toast.error('Impossible de charger les urgences')
+    } finally {
+      loadingRef.current = false
+    }
+  }
+
+  const loadMessages = async (urgenceId) => {
+    try {
+      const { data } = await api.get(`/client/urgences/${urgenceId}/messages`)
+      setMessages(current => ({ ...current, [urgenceId]: data }))
+    } catch {
+      // L'urgence peut avoir ete supprimee ou appartenir a une ancienne session.
+    }
+  }
 
   const localiser = () => {
     if (!navigator.geolocation) {
@@ -50,8 +84,8 @@ const UrgenceClient = () => {
       (error) => {
         setLocalisationStatus('erreur')
         toast.error(error.code === 1
-          ? 'Activez et autorisez la localisation pour envoyer l’urgence'
-          : 'Impossible d’obtenir votre position exacte. Réessayez dehors ou activez le GPS.')
+          ? 'Activez et autorisez la localisation pour envoyer l urgence'
+          : 'Impossible d obtenir votre position exacte. Reessayez dehors ou activez le GPS.')
       },
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     )
@@ -61,14 +95,22 @@ const UrgenceClient = () => {
     api.get('/client/profil').then(r => {
       setForm(f => ({ ...f, telephone: r.data.telephone || '' }))
     }).catch(() => {})
-    load()
+    load({ silent: false })
     localiser()
+    const timer = setInterval(() => load(), 2000)
+    return () => clearInterval(timer)
   }, [])
+
+  useEffect(() => {
+    if (!activeId) return
+    const timer = setInterval(() => loadMessages(activeId), 2000)
+    return () => clearInterval(timer)
+  }, [activeId])
 
   const envoyer = async (e) => {
     e.preventDefault()
     if (!form.telephone.trim()) {
-      toast.error('Numéro téléphone obligatoire')
+      toast.error('Numero telephone obligatoire')
       return
     }
     if (!form.message.trim()) {
@@ -83,10 +125,12 @@ const UrgenceClient = () => {
     setLoading(true)
     try {
       playUrgenceSound()
-      await api.post('/client/urgences', form)
-      toast.success('Urgence envoyée à l’admin')
+      const { data } = await api.post('/client/urgences', form)
+      toast.success('Urgence envoyee a l admin')
       setForm(f => ({ ...f, message: '' }))
-      load()
+      activeIdRef.current = data.id
+      setActiveId(data.id)
+      await load({ silent: false })
     } catch (err) {
       toast.error(err.response?.data?.message || 'Erreur')
     } finally {
@@ -94,33 +138,47 @@ const UrgenceClient = () => {
     }
   }
 
-  const marquerNotificationsLues = async () => {
+  const sendMessage = async (urgenceId) => {
+    const text = String(reply[urgenceId] || '').trim()
+    if (!text) return
     try {
-      await api.put('/client/urgences/notifications/lire')
+      await api.post(`/client/urgences/${urgenceId}/messages`, { message: text })
+      setReply(current => ({ ...current, [urgenceId]: '' }))
+      await loadMessages(urgenceId)
       await load()
-    } catch {
-      toast.error('Impossible de marquer les notifications comme lues')
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Envoi impossible')
     }
+  }
+
+  const selectUrgence = async (id) => {
+    activeIdRef.current = id
+    setActiveId(id)
+    await loadMessages(id)
+    await api.put('/client/urgences/notifications/lire').catch(() => {})
+    await load()
   }
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <header className="bg-red-700 text-white px-6 py-4 flex items-center gap-3">
-        <Link to="/dashboard" className="p-2 rounded-lg hover:bg-white/10"><MdArrowBack size={20} /></Link>
-        <h1 className="font-bold text-lg flex items-center gap-2"><MdWarning /> Dépannage urgence</h1>
+      <header className="bg-red-700 text-white px-4 py-4 flex items-center gap-3">
+        <Link to="/dashboard" className="px-3 py-2 rounded-xl hover:bg-white/10 flex items-center gap-2 font-semibold">
+          <MdArrowBack size={20} /> Retour
+        </Link>
+        <h1 className="font-bold text-lg flex items-center gap-2"><MdWarning /> Depannage urgence</h1>
       </header>
 
-      <div className="max-w-3xl mx-auto p-6 flex flex-col gap-5">
+      <div className="max-w-3xl mx-auto p-4 sm:p-6 flex flex-col gap-5">
         <form onSubmit={envoyer} className="urgence-form bg-white rounded-2xl shadow-sm p-5 border-l-4 border-red-600">
           <div className="mb-5">
-            <h2 className="text-xl font-bold text-gray-800">Alerte dépannage immédiat</h2>
-            <p className="text-sm text-gray-500">Route nationale, hors Antananarivo, ou panne urgente.</p>
+            <h2 className="text-xl font-bold text-gray-800">Alerte depannage immediat</h2>
+            <p className="text-sm text-gray-500">Ce premier message part dans l alerte urgence. Les reponses suivantes restent dans le message APK.</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone obligatoire</label>
-              <input className="input" value={form.telephone} onChange={e => setForm(f => ({ ...f, telephone: e.target.value }))} placeholder="Votre numéro joignable" />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Telephone obligatoire</label>
+              <input className="input" value={form.telephone} onChange={e => setForm(f => ({ ...f, telephone: e.target.value }))} placeholder="Votre numero joignable" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Zone</label>
@@ -141,14 +199,14 @@ const UrgenceClient = () => {
                     {localisationStatus === 'ok' ? (
                       <>
                         <p className="text-sm font-semibold text-green-900">Position exacte obtenue</p>
-                        <p className="text-xs text-green-800 break-all">{form.latitude}, {form.longitude} · précision ±{form.precision} m</p>
+                        <p className="text-xs text-green-800 break-all">{form.latitude}, {form.longitude} - precision +/-{form.precision} m</p>
                       </>
                     ) : (
                       <>
                         <p className="text-sm font-semibold text-red-900">
                           {localisationStatus === 'chargement' ? 'Recherche de votre position...' : 'Position GPS obligatoire'}
                         </p>
-                        <p className="text-xs text-red-800">Activez la localisation de l’appareil puis réessayez.</p>
+                        <p className="text-xs text-red-800">Activez la localisation de l appareil puis reessayez.</p>
                       </>
                     )}
                   </div>
@@ -161,56 +219,78 @@ const UrgenceClient = () => {
 
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Message urgence</label>
-              <textarea className="input" rows={4} value={form.message} onChange={e => setForm(f => ({ ...f, message: e.target.value }))} placeholder="Décrivez la panne, véhicule et nombre de personnes..." />
+              <textarea className="input" rows={4} value={form.message} onChange={e => setForm(f => ({ ...f, message: e.target.value }))} placeholder="Decrivez la panne, vehicule et nombre de personnes..." />
             </div>
           </div>
 
           <div className="urgence-submit-bar mt-5">
             <button disabled={loading || localisationStatus !== 'ok'} className="w-full bg-red-700 hover:bg-red-800 text-white px-5 py-4 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50">
-              <MdSend size={20} /> {loading ? 'Envoi...' : 'Envoyer l’alerte urgence'}
+              <MdSend size={20} /> {loading ? 'Envoi...' : 'Envoyer l alerte urgence'}
             </button>
           </div>
         </form>
 
         <a href={`tel:${ADMIN_PHONE}`} className="bg-green-600 hover:bg-green-700 text-white rounded-2xl p-4 flex items-center justify-center gap-2 font-bold">
-          <MdCall size={22} /> Appeler directement l’admin · 034 61 721 32
+          <MdCall size={22} /> Appeler directement l admin - 034 61 721 32
         </a>
 
         <div className="bg-white rounded-2xl shadow-sm p-5">
           <div className="flex items-center justify-between gap-3 mb-3">
             <h2 className="font-bold text-gray-800">Mes demandes urgence</h2>
-            {items.some(item => Boolean(item.client_notification_non_lue)) && (
-              <button onClick={marquerNotificationsLues} className="text-xs font-semibold text-primary">Marquer comme lues</button>
-            )}
+            <button onClick={() => load({ silent: false })} className="text-xs font-semibold text-primary">Actualiser</button>
           </div>
           <div className="flex flex-col gap-3">
-            {items.map(u => (
-              <div key={u.id} className="bg-gray-50 rounded-xl p-3">
-                <div className="flex justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-gray-800">{statusLabels[u.statut] || u.statut}</span>
-                    {Boolean(u.client_notification_non_lue) && (
-                      <span className="badge bg-yellow-100 text-yellow-800 flex items-center gap-1">
-                        <MdNotifications size={13} /> Nouveau
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-xs text-gray-400">{new Date(u.created_at).toLocaleString('fr-FR')}</span>
+            {items.map(u => {
+              const isActive = activeId === u.id
+              const thread = messages[u.id] || []
+              return (
+                <div key={u.id} className={`rounded-xl p-3 border ${isActive ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-transparent'}`}>
+                  <button type="button" onClick={() => selectUrgence(u.id)} className="w-full text-left">
+                    <div className="flex justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-800">{statusLabels[u.statut] || u.statut}</span>
+                      </div>
+                      <span className="text-xs text-gray-400">{new Date(u.created_at).toLocaleString('fr-FR')}</span>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{u.message}</p>
+                  </button>
+
+                  {u.gps && (
+                    <a href={u.gps.carte_url} target="_blank" rel="noreferrer" className="mt-2 text-sm text-blue-700 font-semibold flex items-center gap-1">
+                      <MdLocationOn /> Voir la position envoyee
+                    </a>
+                  )}
+
+                  {isActive && (
+                    <div className="mt-3 bg-white rounded-xl border border-gray-200 p-3">
+                      <p className="text-xs font-bold text-gray-500 mb-2">Messages APK</p>
+                      <div className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
+                        {thread.map(m => (
+                          <div key={m.id} className={`rounded-xl px-3 py-2 text-sm max-w-[88%] ${m.expediteur === 'client' ? 'bg-red-100 text-red-950 self-end' : 'bg-blue-50 text-blue-950 self-start'}`}>
+                            <p className="whitespace-pre-wrap">{m.message}</p>
+                            <p className="text-[10px] opacity-60 mt-1">{new Date(m.created_at).toLocaleString('fr-FR')}</p>
+                          </div>
+                        ))}
+                        {thread.length === 0 && <p className="text-sm text-gray-400 text-center py-3">Aucun message apres l alerte.</p>}
+                      </div>
+                      <div className="mt-3 flex gap-2">
+                        <textarea
+                          className="input flex-1"
+                          rows={2}
+                          value={reply[u.id] || ''}
+                          onChange={e => setReply(r => ({ ...r, [u.id]: e.target.value }))}
+                          placeholder="Repondre a l admin..."
+                        />
+                        <button onClick={() => sendMessage(u.id)} className="bg-red-700 hover:bg-red-800 text-white px-4 rounded-xl font-bold">
+                          <MdSend size={20} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{u.message}</p>
-                {u.gps && (
-                  <a href={u.gps.carte_url} target="_blank" rel="noreferrer" className="mt-2 text-sm text-blue-700 font-semibold flex items-center gap-1">
-                    <MdLocationOn /> Voir la position envoyée
-                  </a>
-                )}
-                {u.reponse_admin && (
-                  <div className="mt-3 bg-blue-50 rounded-xl p-3 text-sm text-blue-900">
-                    <strong>Réponse admin : </strong>{u.reponse_admin}
-                  </div>
-                )}
-              </div>
-            ))}
-            {items.length === 0 && <p className="text-sm text-gray-400">Aucune demande envoyée.</p>}
+              )
+            })}
+            {items.length === 0 && <p className="text-sm text-gray-400">Aucune demande envoyee.</p>}
           </div>
         </div>
       </div>

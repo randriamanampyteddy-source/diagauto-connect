@@ -91,8 +91,12 @@ router.post('/client/urgences', verifyToken, isClient, urgenceCtrl.creerUrgence)
 router.get('/client/urgences', verifyToken, isClient, urgenceCtrl.getMesUrgences);
 router.get('/client/urgences/notifications/stats', verifyToken, isClient, urgenceCtrl.getMesNotificationsStats);
 router.put('/client/urgences/notifications/lire', verifyToken, isClient, urgenceCtrl.lireMesNotifications);
+router.get('/client/urgences/:id/messages', verifyToken, isClient, urgenceCtrl.getMessagesUrgenceClient);
+router.post('/client/urgences/:id/messages', verifyToken, isClient, urgenceCtrl.envoyerMessageUrgenceClient);
 router.get('/admin/urgences', verifyToken, isAdmin, urgenceCtrl.getAllUrgences);
 router.get('/admin/urgences/stats', verifyToken, isAdmin, urgenceCtrl.getUrgenceStats);
+router.get('/admin/urgences/:id/messages', verifyToken, isAdmin, urgenceCtrl.getMessagesUrgenceAdmin);
+router.post('/admin/urgences/:id/messages', verifyToken, isAdmin, urgenceCtrl.envoyerMessageUrgenceAdmin);
 router.put('/admin/urgences/:id', verifyToken, isAdmin, urgenceCtrl.repondreUrgence);
 
 // ATELIER CONFIG
