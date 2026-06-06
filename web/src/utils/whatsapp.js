@@ -21,18 +21,21 @@ export const ouvrirWhatsAppManuel = (resultat) => {
 
   try {
     if (isMobile && resultat.lien_app) {
-      window.location.href = appLink
-      setTimeout(() => {
-        window.location.href = webLink
-      }, 1200)
+      const appLauncher = window.Capacitor?.Plugins?.AppLauncher
+      if (appLauncher?.openUrl) {
+        appLauncher.openUrl({ url: appLink }).catch(() => appLauncher.openUrl({ url: webLink }))
+        return true
+      }
+      const opened = window.open(appLink, '_blank', 'noopener,noreferrer')
+      if (!opened) window.open(webLink, '_blank', 'noopener,noreferrer')
       return true
     }
 
     const opened = window.open(webLink, '_blank', 'noopener,noreferrer')
-    if (!opened) window.location.href = webLink
+    if (!opened) window.open(webLink, '_blank', 'noopener,noreferrer')
     return true
   } catch {
-    window.location.href = webLink
+    window.open(webLink, '_blank', 'noopener,noreferrer')
     return true
   }
 }

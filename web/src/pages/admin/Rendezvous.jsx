@@ -3,8 +3,7 @@ import AdminLayout from '../../components/AdminLayout'
 import AdminQuickClientModal from '../../components/AdminQuickClientModal'
 import api from '../../api/axios'
 import { toast } from 'react-toastify'
-import { MdAdd, MdPersonAdd, MdSearch } from 'react-icons/md'
-import { getWhatsAppWarning, ouvrirWhatsAppManuel } from '../../utils/whatsapp'
+import { MdAdd, MdMessage, MdPersonAdd, MdSearch } from 'react-icons/md'
 
 const statusColors = {
   en_attente: 'bg-yellow-100 text-yellow-700',
@@ -25,6 +24,9 @@ const Rendezvous = () => {
   const [createModal, setCreateModal] = useState(false)
   const [quickClientModal, setQuickClientModal] = useState(false)
   const [createForm, setCreateForm] = useState(emptyCreateForm)
+  const [messagesModal, setMessagesModal] = useState(null)
+  const [messages, setMessages] = useState([])
+  const [messageText, setMessageText] = useState('')
 
   const load = () => {
     api.get('/admin/rendezvous').then(r => setRdvs(r.data)).catch(() => {})
@@ -47,11 +49,8 @@ const Rendezvous = () => {
 
   const creerRendezvous = async () => {
     try {
-      const { data } = await api.post('/admin/rendezvous', createForm)
+      await api.post('/admin/rendezvous', createForm)
       toast.success('Rendez-vous cree et confirme')
-      const warning = getWhatsAppWarning(data.whatsapp, 'RDV confirme')
-      if (warning) toast.warning(warning)
-      if (ouvrirWhatsAppManuel(data.whatsapp)) toast.info('WhatsApp ouvert pour envoyer le message au client')
       setCreateModal(false)
       setCreateForm(emptyCreateForm)
       setVehicules([])
@@ -69,11 +68,8 @@ const Rendezvous = () => {
 
   const sauvegarder = async () => {
     try {
-      const { data } = await api.put(`/admin/rendezvous/${editModal.id}/statut`, editForm)
+      await api.put(`/admin/rendezvous/${editModal.id}/statut`, editForm)
       toast.success('Statut mis a jour')
-      const warning = editForm.statut === 'confirme' ? getWhatsAppWarning(data.whatsapp, 'RDV valide') : null
-      if (warning) toast.warning(warning)
-      if (ouvrirWhatsAppManuel(data.whatsapp)) toast.info('WhatsApp ouvert pour envoyer le message au client')
       setEditModal(null)
       load()
     } catch {
@@ -84,6 +80,30 @@ const Rendezvous = () => {
   const filtered = rdvs.filter(r =>
     `${r.nom} ${r.prenom} ${r.id_client} ${r.marque} ${r.modele}`.toLowerCase().includes(search.toLowerCase())
   )
+
+  const ouvrirMessages = async (rdv) => {
+    setMessagesModal(rdv)
+    setMessageText('')
+    try {
+      const { data } = await api.get(`/admin/rendezvous/${rdv.id}/messages`)
+      setMessages(data)
+    } catch {
+      toast.error('Impossible de charger les messages')
+    }
+  }
+
+  const envoyerMessage = async () => {
+    if (!messageText.trim() || !messagesModal) return
+    try {
+      await api.post(`/admin/rendezvous/${messagesModal.id}/messages`, { message: messageText })
+      setMessageText('')
+      const { data } = await api.get(`/admin/rendezvous/${messagesModal.id}/messages`)
+      setMessages(data)
+      toast.success('Message envoye')
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Envoi impossible')
+    }
+  }
 
   return (
     <AdminLayout>
@@ -126,7 +146,12 @@ const Rendezvous = () => {
                 <td className="px-4 py-3 max-w-xs truncate">{r.motif || '-'}</td>
                 <td className="px-4 py-3"><span className={`badge ${statusColors[r.statut]}`}>{statusLabels[r.statut]}</span></td>
                 <td className="px-4 py-3">
-                  <button onClick={() => openEditModal(r)} className="btn-primary text-xs py-1 px-3">Modifier</button>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={() => openEditModal(r)} className="btn-primary text-xs py-1 px-3">Modifier</button>
+                    <button onClick={() => ouvrirMessages(r)} className="bg-blue-600 hover:bg-blue-700 text-white text-xs py-1 px-3 rounded-xl flex items-center gap-1">
+                      <MdMessage size={14} /> Messages
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -207,6 +232,32 @@ const Rendezvous = () => {
                 <button onClick={() => setEditModal(null)} className="px-4 py-2 border rounded-xl text-gray-600">Annuler</button>
                 <button onClick={sauvegarder} className="btn-primary">Enregistrer</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {messagesModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-lg p-5 max-h-[92vh] flex flex-col">
+            <h2 className="text-lg font-bold mb-1">Messages rendez-vous</h2>
+            <p className="text-sm text-gray-500 mb-4">{messagesModal.prenom} {messagesModal.nom} - {messagesModal.marque} {messagesModal.modele}</p>
+            <div className="flex-1 overflow-y-auto bg-gray-50 rounded-xl p-3 space-y-2 min-h-[260px]">
+              {messages.map(m => (
+                <div key={m.id} className={`rounded-xl p-3 text-sm max-w-[85%] ${m.expediteur === 'client' ? 'bg-white border ml-auto' : 'bg-blue-50 text-blue-950'}`}>
+                  <p className="text-xs font-semibold mb-1">{m.expediteur === 'client' ? 'Client' : 'Admin'}</p>
+                  <p className="whitespace-pre-wrap">{m.message}</p>
+                  <p className="text-[11px] text-gray-400 mt-1">{new Date(m.created_at).toLocaleString('fr-FR')}</p>
+                </div>
+              ))}
+              {messages.length === 0 && <p className="text-sm text-gray-400 text-center py-8">Aucun message.</p>}
+            </div>
+            <div className="mt-3 flex gap-2">
+              <textarea className="input flex-1" rows={2} value={messageText} onChange={e => setMessageText(e.target.value)} placeholder="Repondre au client..." />
+              <button onClick={envoyerMessage} className="btn-primary px-4 flex items-center gap-2"><MdMessage /> Envoyer</button>
+            </div>
+            <div className="flex justify-end mt-3">
+              <button onClick={() => setMessagesModal(null)} className="px-4 py-2 border rounded-xl text-gray-600">Fermer</button>
             </div>
           </div>
         </div>

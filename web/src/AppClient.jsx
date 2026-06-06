@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import PrivateRoute from './components/PrivateRoute'
 import ClientUrgenceNotification from './components/ClientUrgenceNotification'
+import ClientRdvNotification from './components/ClientRdvNotification'
 import ClientMobileNav from './components/ClientMobileNav'
 
 import ClientLogin from './pages/client/Login'
@@ -20,6 +21,7 @@ function AppClient() {
     <AuthProvider>
       <BrowserRouter>
         <ClientUrgenceNotification />
+        <ClientRdvNotification />
         <Routes>
           <Route path="/"          element={<Navigate to="/login" replace />} />
           <Route path="/login"     element={<ClientLogin />} />

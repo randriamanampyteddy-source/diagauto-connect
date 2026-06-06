@@ -33,6 +33,8 @@ router.post('/admin/clients/:id/reset-password', verifyToken, isAdmin, clientCtr
 // ADMIN - Rendez-vous
 router.get('/admin/rendezvous', verifyToken, isAdmin, rdvCtrl.getAllRdv);
 router.post('/admin/rendezvous', verifyToken, isAdmin, rdvCtrl.creerRdvAdmin);
+router.get('/admin/rendezvous/:id/messages', verifyToken, isAdmin, rdvCtrl.getMessagesRdvAdmin);
+router.post('/admin/rendezvous/:id/messages', verifyToken, isAdmin, rdvCtrl.envoyerMessageRdvAdmin);
 router.put('/admin/rendezvous/:id/statut', verifyToken, isAdmin, rdvCtrl.changerStatutRdv);
 
 // ADMIN - Interventions
@@ -67,6 +69,10 @@ router.post('/client/vehicules', verifyToken, isClient, clientCtrl.ajouterVehicu
 router.post('/client/rendezvous', verifyToken, isClient, rdvCtrl.creerRdv);
 router.get('/client/rendezvous', verifyToken, isClient, rdvCtrl.getMesRdv);
 router.get('/client/rendezvous/tous', verifyToken, isClient, rdvCtrl.getTousRdvActifs);
+router.get('/client/rendezvous/notifications/stats', verifyToken, isClient, rdvCtrl.getMesRdvNotificationsStats);
+router.put('/client/rendezvous/notifications/lire', verifyToken, isClient, rdvCtrl.lireMesRdvNotifications);
+router.get('/client/rendezvous/:id/messages', verifyToken, isClient, rdvCtrl.getMessagesRdvClient);
+router.post('/client/rendezvous/:id/messages', verifyToken, isClient, rdvCtrl.envoyerMessageRdvClient);
 router.put('/client/rendezvous/:id/annuler', verifyToken, isClient, rdvCtrl.annulerMonRdv);
 router.put('/client/rendezvous/:id/reporter', verifyToken, isClient, rdvCtrl.reporterMonRdv);
 

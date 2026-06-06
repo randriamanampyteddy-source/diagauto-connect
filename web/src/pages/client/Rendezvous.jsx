@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../../api/axios'
 import { toast } from 'react-toastify'
-import { MdArrowBack, MdArrowBackIos, MdArrowForwardIos, MdAdd, MdDirectionsCar, MdAccessTime, MdCheckCircle, MdCancel, MdEditCalendar } from 'react-icons/md'
+import { MdArrowBack, MdArrowBackIos, MdArrowForwardIos, MdAdd, MdDirectionsCar, MdAccessTime, MdCheckCircle, MdCancel, MdEditCalendar, MdMessage, MdNotifications, MdSend } from 'react-icons/md'
 
 const JOURS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam']
 const MOIS  = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']
@@ -14,6 +14,14 @@ const toLocalDate = (d) => {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const j = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${j}`
+}
+
+const dateKey = (value) => String(value || '').slice(0, 10)
+const formatDate = (value, options = { day: 'numeric', month: 'short' }) => {
+  const key = dateKey(value)
+  if (!key) return '-'
+  const date = new Date(`${key}T00:00:00`)
+  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString('fr-FR', options)
 }
 
 const StatusIcon = ({ statut }) => {
@@ -34,6 +42,9 @@ const Rendezvous = () => {
   const [form, setForm]         = useState({ vehicule_id: '', heure_rdv: '', motif: '' })
   const [reportModal, setReportModal] = useState(null)
   const [reportForm, setReportForm] = useState({ date_rdv: '', heure_rdv: '' })
+  const [messagesModal, setMessagesModal] = useState(null)
+  const [messages, setMessages] = useState([])
+  const [messageText, setMessageText] = useState('')
 
   const load = () => {
     api.get('/client/rendezvous').then(r => setRdvs(r.data)).catch(() => {})
@@ -62,7 +73,7 @@ const Rendezvous = () => {
   // RDV par date (pour affichage calendrier)
   const rdvParDate = {}
   rdvs.forEach(r => {
-    const d = r.date_rdv?.slice(0, 10)
+    const d = dateKey(r.date_rdv)
     if (!rdvParDate[d]) rdvParDate[d] = []
     rdvParDate[d].push(r)
   })
@@ -70,7 +81,7 @@ const Rendezvous = () => {
   // Tous les RDV par date (pour limite)
   const tousParDate = {}
   ;(tousRdvs.length ? tousRdvs : rdvs).forEach(r => {
-    const d = r.date_rdv?.slice(0, 10)
+    const d = dateKey(r.date_rdv)
     if (!tousParDate[d]) tousParDate[d] = []
     tousParDate[d].push(r)
   })
@@ -141,7 +152,7 @@ const Rendezvous = () => {
 
   const ouvrirReport = (rdv) => {
     setReportModal(rdv)
-    setReportForm({ date_rdv: rdv.date_rdv?.slice(0, 10) || '', heure_rdv: String(rdv.heure_rdv || '').slice(0, 5) })
+    setReportForm({ date_rdv: dateKey(rdv.date_rdv), heure_rdv: String(rdv.heure_rdv || '').slice(0, 5) })
   }
 
   const reporterRdv = async (e) => {
@@ -160,6 +171,31 @@ const Rendezvous = () => {
         return
       }
       toast.error(err.response?.data?.message || 'Report impossible')
+    }
+  }
+
+  const ouvrirMessages = async (rdv) => {
+    setMessagesModal(rdv)
+    setMessageText('')
+    try {
+      const { data } = await api.get(`/client/rendezvous/${rdv.id}/messages`)
+      setMessages(data)
+      await api.put('/client/rendezvous/notifications/lire')
+    } catch {
+      toast.error('Impossible de charger les messages')
+    }
+  }
+
+  const envoyerMessage = async () => {
+    if (!messageText.trim() || !messagesModal) return
+    try {
+      await api.post(`/client/rendezvous/${messagesModal.id}/messages`, { message: messageText })
+      setMessageText('')
+      const { data } = await api.get(`/client/rendezvous/${messagesModal.id}/messages`)
+      setMessages(data)
+      toast.success('Message envoye')
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Envoi impossible')
     }
   }
 
@@ -283,12 +319,12 @@ const Rendezvous = () => {
         </div>
 
         {/* Liste RDV du mois */}
-        {rdvs.filter(r => r.date_rdv?.slice(0,7) === `${annee}-${String(mois+1).padStart(2,'0')}`).length > 0 && (
+        {rdvs.filter(r => dateKey(r.date_rdv).slice(0,7) === `${annee}-${String(mois+1).padStart(2,'0')}`).length > 0 && (
           <div className="bg-white rounded-2xl shadow-sm p-4">
             <h3 className="font-semibold text-gray-700 mb-3 text-sm">Mes RDV — {MOIS[mois]}</h3>
             <div className="flex flex-col gap-2">
               {rdvs
-                .filter(r => r.date_rdv?.slice(0,7) === `${annee}-${String(mois+1).padStart(2,'0')}`)
+                .filter(r => dateKey(r.date_rdv).slice(0,7) === `${annee}-${String(mois+1).padStart(2,'0')}`)
                 .sort((a,b) => a.date_rdv > b.date_rdv ? 1 : -1)
                 .map(r => (
                   <div key={r.id} className="flex flex-col sm:flex-row sm:items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5">
@@ -305,20 +341,25 @@ const Rendezvous = () => {
                     </div>
                     <div className="text-right shrink-0">
                       <p className="text-xs font-medium text-gray-700">
-                        {new Date(r.date_rdv+'T00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}
+                        {formatDate(r.date_rdv)}
                       </p>
                       <p className="text-xs text-gray-400">{r.heure_rdv}</p>
                     </div>
-                    {['en_attente', 'confirme'].includes(r.statut) && (
-                      <div className="flex gap-2 sm:ml-2">
+                    <div className="flex gap-2 sm:ml-2 flex-wrap">
+                      <button onClick={() => ouvrirMessages(r)} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1">
+                        <MdMessage size={15} /> Messages
+                      </button>
+                      {['en_attente', 'confirme'].includes(r.statut) && (
+                        <>
                         <button onClick={() => ouvrirReport(r)} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1">
                           <MdEditCalendar size={15} /> Reporter
                         </button>
                         <button onClick={() => annulerRdv(r)} className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1">
                           <MdCancel size={15} /> Annuler
                         </button>
-                      </div>
-                    )}
+                        </>
+                      )}
+                    </div>
                   </div>
                 ))
               }
@@ -333,7 +374,7 @@ const Rendezvous = () => {
           <div className="bg-white rounded-2xl w-full max-w-md p-5">
             <h2 className="text-lg font-bold text-gray-800 mb-1">Nouveau rendez-vous</h2>
             <p className="text-sm text-primary font-medium mb-4">
-              {dateChoisie && new Date(dateChoisie+'T00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}
+              {dateChoisie && formatDate(dateChoisie, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
 
             <form onSubmit={creer} className="flex flex-col gap-3">
@@ -415,7 +456,7 @@ const Rendezvous = () => {
                   onChange={e => setReportForm(f => ({ ...f, date_rdv: e.target.value }))}
                   required
                 />
-                {reportForm.date_rdv && estPlein(reportForm.date_rdv) && reportForm.date_rdv !== reportModal.date_rdv?.slice(0, 10) && (
+                {reportForm.date_rdv && estPlein(reportForm.date_rdv) && reportForm.date_rdv !== dateKey(reportModal.date_rdv) && (
                   <p className="text-xs text-red-600 mt-1">Cette date est complète. Une autre date sera proposée.</p>
                 )}
               </div>
@@ -440,6 +481,32 @@ const Rendezvous = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {messagesModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-5 max-h-[92vh] flex flex-col">
+            <h2 className="text-lg font-bold text-gray-800 mb-1 flex items-center gap-2">
+              <MdNotifications className="text-primary" /> Messages rendez-vous
+            </h2>
+            <p className="text-sm text-gray-500 mb-3">{messagesModal.marque} {messagesModal.modele} - {formatDate(messagesModal.date_rdv)} {String(messagesModal.heure_rdv || '').slice(0, 5)}</p>
+            <div className="flex-1 overflow-y-auto bg-gray-50 rounded-xl p-3 space-y-2 min-h-[260px]">
+              {messages.map(m => (
+                <div key={m.id} className={`rounded-xl p-3 text-sm max-w-[86%] ${m.expediteur === 'client' ? 'bg-primary text-white ml-auto' : 'bg-white border text-gray-800'}`}>
+                  <p className="text-xs font-semibold mb-1">{m.expediteur === 'client' ? 'Moi' : 'Admin'}</p>
+                  <p className="whitespace-pre-wrap">{m.message}</p>
+                  <p className={`text-[11px] mt-1 ${m.expediteur === 'client' ? 'text-white/70' : 'text-gray-400'}`}>{new Date(m.created_at).toLocaleString('fr-FR')}</p>
+                </div>
+              ))}
+              {messages.length === 0 && <p className="text-sm text-gray-400 text-center py-8">Aucun message.</p>}
+            </div>
+            <div className="mt-3 flex gap-2">
+              <textarea className="input flex-1" rows={2} value={messageText} onChange={e => setMessageText(e.target.value)} placeholder="Ecrire a l'admin..." />
+              <button onClick={envoyerMessage} className="btn-primary px-4 flex items-center gap-2"><MdSend /> Envoyer</button>
+            </div>
+            <button onClick={() => setMessagesModal(null)} className="mt-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Fermer</button>
           </div>
         </div>
       )}

@@ -38,3 +38,30 @@ export const notifierReponseUrgenceClient = async () => {
     // The in-app sound and banner remain available.
   }
 }
+
+export const notifierRendezvousClient = async () => {
+  playUrgenceSound()
+  const title = 'Rendez-vous DiagAuto Mada'
+  const body = 'Nouveau message ou mise a jour de votre rendez-vous.'
+
+  try {
+    const localNotifications = window.Capacitor?.Plugins?.LocalNotifications
+    if (localNotifications) {
+      await localNotifications.schedule({
+        notifications: [{
+          id: Date.now() % 2147483647,
+          title,
+          body,
+          schedule: { at: new Date(Date.now() + 250) },
+          sound: 'default',
+        }],
+      })
+      return
+    }
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, { body })
+    }
+  } catch {
+    // The in-app sound and banner remain available.
+  }
+}

@@ -53624,6 +53624,441 @@ var require_clientController = __commonJS({
   }
 });
 
+// ../backend/src/controllers/rendezvousController.js
+var require_rendezvousController = __commonJS({
+  "../backend/src/controllers/rendezvousController.js"(exports2) {
+    var db2 = require_db2();
+    var MAX_PAR_JOUR = 2;
+    var messagesTableReady = false;
+    var addDays = (date, days) => {
+      const d = /* @__PURE__ */ new Date(`${String(date).slice(0, 10)}T12:00:00`);
+      d.setDate(d.getDate() + days);
+      return d.toISOString().slice(0, 10);
+    };
+    var getCountForDate = async (executor, date, excludeId = null) => {
+      const params = [String(date).slice(0, 10)];
+      let exclude = "";
+      if (excludeId) {
+        exclude = " AND id <> ?";
+        params.push(excludeId);
+      }
+      const [[row]] = await executor.query(
+        `SELECT COUNT(*) AS total FROM rendezvous
+     WHERE date_rdv = ? AND statut <> 'annule'${exclude}`,
+        params
+      );
+      return Number(row.total) || 0;
+    };
+    var findNextAvailableDate = async (executor, startDate, excludeId = null) => {
+      for (let i = 1; i <= 90; i += 1) {
+        const candidate = addDays(startDate, i);
+        if (await getCountForDate(executor, candidate, excludeId) < MAX_PAR_JOUR) return candidate;
+      }
+      return null;
+    };
+    var dateIsPast = (date) => String(date).slice(0, 10) < (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+    var formatDate = (date) => (/* @__PURE__ */ new Date(`${String(date).slice(0, 10)}T12:00:00`)).toLocaleDateString("fr-FR");
+    var statusLabels = {
+      en_attente: "En attente",
+      confirme: "Confirme",
+      annule: "Annule",
+      termine: "Termine"
+    };
+    var ensureMessagesTable = async () => {
+      if (messagesTableReady) return;
+      if (db2.type === "postgres") {
+        await db2.query(
+          `CREATE TABLE IF NOT EXISTS rendezvous_messages (
+        id SERIAL PRIMARY KEY,
+        rendezvous_id INTEGER NOT NULL,
+        client_id INTEGER NOT NULL,
+        expediteur VARCHAR(20) NOT NULL,
+        message TEXT NOT NULL,
+        lu_client BOOLEAN DEFAULT FALSE,
+        lu_admin BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`
+        );
+      } else {
+        await db2.query(
+          `CREATE TABLE IF NOT EXISTS rendezvous_messages (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        rendezvous_id INT NOT NULL,
+        client_id INT NOT NULL,
+        expediteur VARCHAR(20) NOT NULL,
+        message TEXT NOT NULL,
+        lu_client BOOLEAN DEFAULT FALSE,
+        lu_admin BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`
+        );
+      }
+      messagesTableReady = true;
+    };
+    var ajouterMessageRdv = async ({ rendezvousId, clientId, expediteur, message }) => {
+      await ensureMessagesTable();
+      await db2.query(
+        `INSERT INTO rendezvous_messages
+     (rendezvous_id, client_id, expediteur, message, lu_client, lu_admin)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          rendezvousId,
+          clientId,
+          expediteur,
+          message,
+          expediteur === "client",
+          expediteur !== "client"
+        ]
+      );
+    };
+    exports2.creerRdvAdmin = async (req, res) => {
+      const conn = await db2.getConnection();
+      let dateLock = null;
+      try {
+        const { client_id, vehicule_id, date_rdv, heure_rdv, motif, notes_admin } = req.body;
+        if (!client_id || !vehicule_id || !date_rdv || !heure_rdv) {
+          return res.status(400).json({ message: "Client, vehicule, date et heure obligatoires" });
+        }
+        if (dateIsPast(date_rdv)) return res.status(400).json({ message: "Date rendez-vous invalide" });
+        const [[vehicule]] = await conn.query(
+          "SELECT id, marque, modele, immatriculation FROM vehicules WHERE id = ? AND client_id = ?",
+          [vehicule_id, client_id]
+        );
+        if (!vehicule) return res.status(404).json({ message: "Vehicule introuvable pour ce client" });
+        await conn.beginTransaction();
+        dateLock = `diagauto-rdv-${String(date_rdv).slice(0, 10)}`;
+        const [[lock]] = await conn.query("SELECT GET_LOCK(?, 5) AS acquired", [dateLock]);
+        if (!lock.acquired) {
+          await conn.rollback();
+          return res.status(409).json({ message: "Date en cours de reservation. Reessayez." });
+        }
+        const count = await getCountForDate(conn, date_rdv);
+        if (count >= MAX_PAR_JOUR) {
+          const suggested_date = await findNextAvailableDate(conn, date_rdv);
+          await conn.rollback();
+          return res.status(409).json({
+            message: "Cette date est complete. Maximum 2 rendez-vous par jour.",
+            suggested_date
+          });
+        }
+        const [result] = await conn.query(
+          `INSERT INTO rendezvous
+       (client_id, vehicule_id, date_rdv, heure_rdv, motif, statut, notes_admin)
+       VALUES (?, ?, ?, ?, ?, 'confirme', ?)`,
+          [client_id, vehicule_id, date_rdv, heure_rdv, motif || null, notes_admin || null]
+        );
+        await conn.commit();
+        await ajouterMessageRdv({
+          rendezvousId: result.insertId,
+          clientId: client_id,
+          expediteur: "admin",
+          message: `Votre rendez-vous est confirme.
+Date : ${formatDate(date_rdv)}
+Heure : ${String(heure_rdv).slice(0, 5)}
+Vehicule : ${vehicule.marque} ${vehicule.modele} (${vehicule.immatriculation})${notes_admin ? `
+Note : ${notes_admin}` : ""}`
+        });
+        res.status(201).json({ message: "Rendez-vous cree et confirme", id: result.insertId });
+      } catch (err) {
+        try {
+          await conn.rollback();
+        } catch {
+        }
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+      } finally {
+        if (dateLock) {
+          try {
+            await conn.query("SELECT RELEASE_LOCK(?)", [dateLock]);
+          } catch {
+          }
+        }
+        conn.release();
+      }
+    };
+    exports2.creerRdv = async (req, res) => {
+      const conn = await db2.getConnection();
+      let dateLock = null;
+      try {
+        const { vehicule_id, date_rdv, heure_rdv, motif } = req.body;
+        if (!vehicule_id || !date_rdv || !heure_rdv) {
+          return res.status(400).json({ message: "Vehicule, date et heure obligatoires" });
+        }
+        if (dateIsPast(date_rdv)) return res.status(400).json({ message: "Date rendez-vous invalide" });
+        const [[vehicule]] = await conn.query(
+          "SELECT id FROM vehicules WHERE id = ? AND client_id = ?",
+          [vehicule_id, req.user.id]
+        );
+        if (!vehicule) return res.status(404).json({ message: "Vehicule introuvable" });
+        await conn.beginTransaction();
+        dateLock = `diagauto-rdv-${String(date_rdv).slice(0, 10)}`;
+        const [[lock]] = await conn.query("SELECT GET_LOCK(?, 5) AS acquired", [dateLock]);
+        if (!lock.acquired) {
+          await conn.rollback();
+          return res.status(409).json({ message: "Date en cours de reservation. Veuillez reessayer." });
+        }
+        const count = await getCountForDate(conn, date_rdv);
+        if (count >= MAX_PAR_JOUR) {
+          const suggested_date = await findNextAvailableDate(conn, date_rdv);
+          await conn.rollback();
+          return res.status(409).json({
+            message: "Cette date est complete. Maximum 2 rendez-vous par jour.",
+            suggested_date
+          });
+        }
+        await conn.query(
+          "INSERT INTO rendezvous (client_id, vehicule_id, date_rdv, heure_rdv, motif) VALUES (?, ?, ?, ?, ?)",
+          [req.user.id, vehicule_id, date_rdv, heure_rdv, motif]
+        );
+        await conn.commit();
+        res.status(201).json({ message: "Rendez-vous demande avec succes" });
+      } catch (err) {
+        try {
+          await conn.rollback();
+        } catch {
+        }
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+      } finally {
+        if (dateLock) {
+          try {
+            await conn.query("SELECT RELEASE_LOCK(?)", [dateLock]);
+          } catch {
+          }
+        }
+        conn.release();
+      }
+    };
+    exports2.getMesRdv = async (req, res) => {
+      try {
+        const [rows] = await db2.query(
+          `SELECT r.*, v.marque, v.modele, v.immatriculation
+       FROM rendezvous r JOIN vehicules v ON r.vehicule_id = v.id
+       WHERE r.client_id = ? ORDER BY r.date_rdv DESC`,
+          [req.user.id]
+        );
+        res.json(rows);
+      } catch (err) {
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+      }
+    };
+    exports2.getAllRdv = async (req, res) => {
+      try {
+        const [rows] = await db2.query(
+          `SELECT r.*, c.nom, c.prenom, c.id_client, v.marque, v.modele, v.immatriculation
+       FROM rendezvous r
+       JOIN clients c ON r.client_id = c.id
+       JOIN vehicules v ON r.vehicule_id = v.id
+       ORDER BY r.date_rdv DESC`
+        );
+        res.json(rows);
+      } catch (err) {
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+      }
+    };
+    exports2.getTousRdvActifs = async (req, res) => {
+      try {
+        const [rows] = await db2.query(
+          `SELECT r.id, r.date_rdv, r.heure_rdv, r.statut, v.immatriculation
+       FROM rendezvous r JOIN vehicules v ON r.vehicule_id = v.id
+       WHERE r.statut != 'annule'
+       ORDER BY r.date_rdv ASC`
+        );
+        res.json(rows);
+      } catch (err) {
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+      }
+    };
+    exports2.annulerMonRdv = async (req, res) => {
+      try {
+        const { id } = req.params;
+        const [result] = await db2.query(
+          `UPDATE rendezvous SET statut = 'annule'
+       WHERE id = ? AND client_id = ? AND statut IN ('en_attente', 'confirme')`,
+          [id, req.user.id]
+        );
+        if (!result.affectedRows) return res.status(400).json({ message: "Rendez-vous non annulable" });
+        res.json({ message: "Rendez-vous annule" });
+      } catch (err) {
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+      }
+    };
+    exports2.reporterMonRdv = async (req, res) => {
+      const conn = await db2.getConnection();
+      let dateLock = null;
+      try {
+        const { id } = req.params;
+        const { date_rdv, heure_rdv } = req.body;
+        if (!date_rdv || !heure_rdv || dateIsPast(date_rdv)) {
+          return res.status(400).json({ message: "Nouvelle date ou heure invalide" });
+        }
+        const [[rdv]] = await conn.query(
+          `SELECT id FROM rendezvous
+       WHERE id = ? AND client_id = ? AND statut IN ('en_attente', 'confirme')`,
+          [id, req.user.id]
+        );
+        if (!rdv) return res.status(400).json({ message: "Rendez-vous non reportable" });
+        await conn.beginTransaction();
+        dateLock = `diagauto-rdv-${String(date_rdv).slice(0, 10)}`;
+        const [[lock]] = await conn.query("SELECT GET_LOCK(?, 5) AS acquired", [dateLock]);
+        if (!lock.acquired) {
+          await conn.rollback();
+          return res.status(409).json({ message: "Date en cours de reservation. Veuillez reessayer." });
+        }
+        const count = await getCountForDate(conn, date_rdv, id);
+        if (count >= MAX_PAR_JOUR) {
+          const suggested_date = await findNextAvailableDate(conn, date_rdv, id);
+          await conn.rollback();
+          return res.status(409).json({
+            message: "Cette date est complete. Choisissez une autre date.",
+            suggested_date
+          });
+        }
+        await conn.query(
+          `UPDATE rendezvous
+       SET date_rdv = ?, heure_rdv = ?, statut = 'en_attente'
+       WHERE id = ? AND client_id = ?`,
+          [date_rdv, heure_rdv, id, req.user.id]
+        );
+        await conn.commit();
+        res.json({ message: "Rendez-vous reporte" });
+      } catch (err) {
+        try {
+          await conn.rollback();
+        } catch {
+        }
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+      } finally {
+        if (dateLock) {
+          try {
+            await conn.query("SELECT RELEASE_LOCK(?)", [dateLock]);
+          } catch {
+          }
+        }
+        conn.release();
+      }
+    };
+    exports2.changerStatutRdv = async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { statut, notes_admin } = req.body;
+        const [[rdv]] = await db2.query(
+          `SELECT r.client_id, r.date_rdv, r.heure_rdv, r.statut, v.marque, v.modele, v.immatriculation
+       FROM rendezvous r JOIN vehicules v ON r.vehicule_id = v.id
+       WHERE r.id = ?`,
+          [id]
+        );
+        if (!rdv) return res.status(404).json({ message: "Rendez-vous introuvable" });
+        if (statut === "confirme" && dateIsPast(rdv.date_rdv)) {
+          return res.status(400).json({ message: "Date rendez-vous invalide: impossible de confirmer une date passee" });
+        }
+        await db2.query("UPDATE rendezvous SET statut = ?, notes_admin = ? WHERE id = ?", [statut, notes_admin, id]);
+        if (statut !== rdv.statut || notes_admin) {
+          await ajouterMessageRdv({
+            rendezvousId: id,
+            clientId: rdv.client_id,
+            expediteur: "admin",
+            message: `Mise a jour rendez-vous.
+Statut : ${statusLabels[statut] || statut}
+Date : ${formatDate(rdv.date_rdv)}
+Heure : ${String(rdv.heure_rdv).slice(0, 5)}
+Vehicule : ${rdv.marque} ${rdv.modele} (${rdv.immatriculation})${notes_admin ? `
+Message admin : ${notes_admin}` : ""}`
+          });
+        }
+        res.json({ message: "Statut mis a jour" });
+      } catch (err) {
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+      }
+    };
+    exports2.getMessagesRdvClient = async (req, res) => {
+      try {
+        await ensureMessagesTable();
+        const { id } = req.params;
+        const [[rdv]] = await db2.query("SELECT id FROM rendezvous WHERE id = ? AND client_id = ?", [id, req.user.id]);
+        if (!rdv) return res.status(404).json({ message: "Rendez-vous introuvable" });
+        const [rows] = await db2.query(
+          "SELECT * FROM rendezvous_messages WHERE rendezvous_id = ? AND client_id = ? ORDER BY created_at ASC, id ASC",
+          [id, req.user.id]
+        );
+        res.json(rows);
+      } catch (err) {
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+      }
+    };
+    exports2.envoyerMessageRdvClient = async (req, res) => {
+      try {
+        const { id } = req.params;
+        const message = String(req.body.message || "").trim();
+        if (!message) return res.status(400).json({ message: "Message obligatoire" });
+        const [[rdv]] = await db2.query("SELECT id FROM rendezvous WHERE id = ? AND client_id = ?", [id, req.user.id]);
+        if (!rdv) return res.status(404).json({ message: "Rendez-vous introuvable" });
+        await ajouterMessageRdv({ rendezvousId: id, clientId: req.user.id, expediteur: "client", message });
+        res.status(201).json({ message: "Message envoye" });
+      } catch (err) {
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+      }
+    };
+    exports2.getMessagesRdvAdmin = async (req, res) => {
+      try {
+        await ensureMessagesTable();
+        const { id } = req.params;
+        const [[rdv]] = await db2.query("SELECT client_id FROM rendezvous WHERE id = ?", [id]);
+        if (!rdv) return res.status(404).json({ message: "Rendez-vous introuvable" });
+        await db2.query("UPDATE rendezvous_messages SET lu_admin = TRUE WHERE rendezvous_id = ? AND expediteur = ?", [id, "client"]);
+        const [rows] = await db2.query(
+          "SELECT * FROM rendezvous_messages WHERE rendezvous_id = ? ORDER BY created_at ASC, id ASC",
+          [id]
+        );
+        res.json(rows);
+      } catch (err) {
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+      }
+    };
+    exports2.envoyerMessageRdvAdmin = async (req, res) => {
+      try {
+        const { id } = req.params;
+        const message = String(req.body.message || "").trim();
+        if (!message) return res.status(400).json({ message: "Message obligatoire" });
+        const [[rdv]] = await db2.query("SELECT client_id FROM rendezvous WHERE id = ?", [id]);
+        if (!rdv) return res.status(404).json({ message: "Rendez-vous introuvable" });
+        await ajouterMessageRdv({ rendezvousId: id, clientId: rdv.client_id, expediteur: "admin", message });
+        res.status(201).json({ message: "Message envoye" });
+      } catch (err) {
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+      }
+    };
+    exports2.getMesRdvNotificationsStats = async (req, res) => {
+      try {
+        await ensureMessagesTable();
+        const [[row]] = await db2.query(
+          `SELECT COUNT(*) AS non_lues, MAX(id) AS notification_version, MAX(created_at) AS derniere_notification
+       FROM rendezvous_messages
+       WHERE client_id = ? AND lu_client = FALSE AND expediteur <> 'client'`,
+          [req.user.id]
+        );
+        res.json({
+          non_lues: Number(row.non_lues) || 0,
+          notification_version: Number(row.notification_version) || 0,
+          derniere_notification: row.derniere_notification || null
+        });
+      } catch (err) {
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+      }
+    };
+    exports2.lireMesRdvNotifications = async (req, res) => {
+      try {
+        await ensureMessagesTable();
+        await db2.query(
+          "UPDATE rendezvous_messages SET lu_client = TRUE WHERE client_id = ? AND expediteur <> 'client'",
+          [req.user.id]
+        );
+        res.json({ message: "Notifications lues" });
+      } catch (err) {
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+      }
+    };
+  }
+});
+
 // ../backend/src/services/whatsappService.js
 var require_whatsappService = __commonJS({
   "../backend/src/services/whatsappService.js"(exports2) {
@@ -53780,299 +54215,6 @@ var require_whatsappService = __commonJS({
           return buildManualWhatsApp(destinataire, message, erreur);
         }
         return { statut: "echec", erreur };
-      }
-    };
-  }
-});
-
-// ../backend/src/controllers/rendezvousController.js
-var require_rendezvousController = __commonJS({
-  "../backend/src/controllers/rendezvousController.js"(exports2) {
-    var db2 = require_db2();
-    var { envoyerWhatsAppClient } = require_whatsappService();
-    var MAX_PAR_JOUR = 2;
-    var addDays = (date, days) => {
-      const d = /* @__PURE__ */ new Date(`${String(date).slice(0, 10)}T12:00:00`);
-      d.setDate(d.getDate() + days);
-      return d.toISOString().slice(0, 10);
-    };
-    var getCountForDate = async (executor, date, excludeId = null) => {
-      const params = [String(date).slice(0, 10)];
-      let exclude = "";
-      if (excludeId) {
-        exclude = " AND id <> ?";
-        params.push(excludeId);
-      }
-      const [[row]] = await executor.query(
-        `SELECT COUNT(*) AS total FROM rendezvous
-     WHERE date_rdv = ? AND statut <> 'annule'${exclude}`,
-        params
-      );
-      return Number(row.total) || 0;
-    };
-    var findNextAvailableDate = async (executor, startDate, excludeId = null) => {
-      for (let i = 1; i <= 90; i++) {
-        const candidate = addDays(startDate, i);
-        if (await getCountForDate(executor, candidate, excludeId) < MAX_PAR_JOUR) return candidate;
-      }
-      return null;
-    };
-    var dateIsPast = (date) => String(date).slice(0, 10) < (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-    exports2.creerRdvAdmin = async (req, res) => {
-      const conn = await db2.getConnection();
-      let dateLock = null;
-      try {
-        const { client_id, vehicule_id, date_rdv, heure_rdv, motif, notes_admin } = req.body;
-        if (!client_id || !vehicule_id || !date_rdv || !heure_rdv) {
-          return res.status(400).json({ message: "Client, v\xE9hicule, date et heure obligatoires" });
-        }
-        if (dateIsPast(date_rdv)) return res.status(400).json({ message: "Date rendez-vous invalide" });
-        const [[vehicule]] = await conn.query(
-          "SELECT id, marque, modele, immatriculation FROM vehicules WHERE id = ? AND client_id = ?",
-          [vehicule_id, client_id]
-        );
-        if (!vehicule) return res.status(404).json({ message: "V\xE9hicule introuvable pour ce client" });
-        await conn.beginTransaction();
-        dateLock = `diagauto-rdv-${String(date_rdv).slice(0, 10)}`;
-        const [[lock]] = await conn.query("SELECT GET_LOCK(?, 5) AS acquired", [dateLock]);
-        if (!lock.acquired) {
-          await conn.rollback();
-          return res.status(409).json({ message: "Date en cours de r\xE9servation. R\xE9essayez." });
-        }
-        const count = await getCountForDate(conn, date_rdv);
-        if (count >= MAX_PAR_JOUR) {
-          const suggested_date = await findNextAvailableDate(conn, date_rdv);
-          await conn.rollback();
-          return res.status(409).json({
-            message: "Cette date est compl\xE8te. Maximum 2 rendez-vous par jour.",
-            suggested_date
-          });
-        }
-        const [result] = await conn.query(
-          `INSERT INTO rendezvous
-       (client_id, vehicule_id, date_rdv, heure_rdv, motif, statut, notes_admin)
-       VALUES (?, ?, ?, ?, ?, 'confirme', ?)`,
-          [client_id, vehicule_id, date_rdv, heure_rdv, motif || null, notes_admin || null]
-        );
-        await conn.commit();
-        const date = (/* @__PURE__ */ new Date(`${String(date_rdv).slice(0, 10)}T12:00:00`)).toLocaleDateString("fr-FR");
-        const whatsapp = await envoyerWhatsAppClient({
-          clientId: client_id,
-          type: "rendezvous_confirme",
-          message: `DiagAuto Mada
-Votre rendez-vous est confirm\xE9.
-Date : ${date}
-Heure : ${String(heure_rdv).slice(0, 5)}
-V\xE9hicule : ${vehicule.marque} ${vehicule.modele} (${vehicule.immatriculation})${notes_admin ? `
-Note : ${notes_admin}` : ""}`
-        });
-        res.status(201).json({ message: "Rendez-vous cr\xE9\xE9 et confirm\xE9", id: result.insertId, whatsapp });
-      } catch (err) {
-        try {
-          await conn.rollback();
-        } catch {
-        }
-        res.status(500).json({ message: "Erreur serveur", error: err.message });
-      } finally {
-        if (dateLock) {
-          try {
-            await conn.query("SELECT RELEASE_LOCK(?)", [dateLock]);
-          } catch {
-          }
-        }
-        conn.release();
-      }
-    };
-    exports2.creerRdv = async (req, res) => {
-      const conn = await db2.getConnection();
-      let dateLock = null;
-      try {
-        const { vehicule_id, date_rdv, heure_rdv, motif } = req.body;
-        if (!vehicule_id || !date_rdv || !heure_rdv) {
-          return res.status(400).json({ message: "V\xE9hicule, date et heure obligatoires" });
-        }
-        if (dateIsPast(date_rdv)) return res.status(400).json({ message: "Date rendez-vous invalide" });
-        const [[vehicule]] = await conn.query(
-          "SELECT id FROM vehicules WHERE id = ? AND client_id = ?",
-          [vehicule_id, req.user.id]
-        );
-        if (!vehicule) return res.status(404).json({ message: "V\xE9hicule introuvable" });
-        await conn.beginTransaction();
-        dateLock = `diagauto-rdv-${String(date_rdv).slice(0, 10)}`;
-        const [[lock]] = await conn.query("SELECT GET_LOCK(?, 5) AS acquired", [dateLock]);
-        if (!lock.acquired) {
-          await conn.rollback();
-          return res.status(409).json({ message: "Date en cours de r\xE9servation. Veuillez r\xE9essayer." });
-        }
-        const count = await getCountForDate(conn, date_rdv);
-        if (count >= MAX_PAR_JOUR) {
-          const suggested_date = await findNextAvailableDate(conn, date_rdv);
-          await conn.rollback();
-          return res.status(409).json({
-            message: "Cette date est compl\xE8te. Maximum 2 rendez-vous par jour.",
-            suggested_date
-          });
-        }
-        await conn.query(
-          "INSERT INTO rendezvous (client_id, vehicule_id, date_rdv, heure_rdv, motif) VALUES (?, ?, ?, ?, ?)",
-          [req.user.id, vehicule_id, date_rdv, heure_rdv, motif]
-        );
-        await conn.commit();
-        res.status(201).json({ message: "Rendez-vous demand\xE9 avec succ\xE8s" });
-      } catch (err) {
-        try {
-          await conn.rollback();
-        } catch {
-        }
-        res.status(500).json({ message: "Erreur serveur", error: err.message });
-      } finally {
-        if (dateLock) {
-          try {
-            await conn.query("SELECT RELEASE_LOCK(?)", [dateLock]);
-          } catch {
-          }
-        }
-        conn.release();
-      }
-    };
-    exports2.getMesRdv = async (req, res) => {
-      try {
-        const [rows] = await db2.query(
-          `SELECT r.*, v.marque, v.modele, v.immatriculation
-       FROM rendezvous r JOIN vehicules v ON r.vehicule_id = v.id
-       WHERE r.client_id = ? ORDER BY r.date_rdv DESC`,
-          [req.user.id]
-        );
-        res.json(rows);
-      } catch (err) {
-        res.status(500).json({ message: "Erreur serveur", error: err.message });
-      }
-    };
-    exports2.getAllRdv = async (req, res) => {
-      try {
-        const [rows] = await db2.query(
-          `SELECT r.*, c.nom, c.prenom, c.id_client, v.marque, v.modele, v.immatriculation
-       FROM rendezvous r
-       JOIN clients c ON r.client_id = c.id
-       JOIN vehicules v ON r.vehicule_id = v.id
-       ORDER BY r.date_rdv DESC`
-        );
-        res.json(rows);
-      } catch (err) {
-        res.status(500).json({ message: "Erreur serveur", error: err.message });
-      }
-    };
-    exports2.getTousRdvActifs = async (req, res) => {
-      try {
-        const [rows] = await db2.query(
-          `SELECT r.id, r.date_rdv, r.heure_rdv, r.statut, v.immatriculation
-       FROM rendezvous r JOIN vehicules v ON r.vehicule_id = v.id
-       WHERE r.statut != 'annule'
-       ORDER BY r.date_rdv ASC`
-        );
-        res.json(rows);
-      } catch (err) {
-        res.status(500).json({ message: "Erreur serveur", error: err.message });
-      }
-    };
-    exports2.annulerMonRdv = async (req, res) => {
-      try {
-        const { id } = req.params;
-        const [result] = await db2.query(
-          `UPDATE rendezvous SET statut = 'annule'
-       WHERE id = ? AND client_id = ? AND statut IN ('en_attente', 'confirme')`,
-          [id, req.user.id]
-        );
-        if (!result.affectedRows) return res.status(400).json({ message: "Rendez-vous non annulable" });
-        res.json({ message: "Rendez-vous annul\xE9" });
-      } catch (err) {
-        res.status(500).json({ message: "Erreur serveur", error: err.message });
-      }
-    };
-    exports2.reporterMonRdv = async (req, res) => {
-      const conn = await db2.getConnection();
-      let dateLock = null;
-      try {
-        const { id } = req.params;
-        const { date_rdv, heure_rdv } = req.body;
-        if (!date_rdv || !heure_rdv || dateIsPast(date_rdv)) {
-          return res.status(400).json({ message: "Nouvelle date ou heure invalide" });
-        }
-        const [[rdv]] = await conn.query(
-          `SELECT id FROM rendezvous
-       WHERE id = ? AND client_id = ? AND statut IN ('en_attente', 'confirme')`,
-          [id, req.user.id]
-        );
-        if (!rdv) return res.status(400).json({ message: "Rendez-vous non reportable" });
-        await conn.beginTransaction();
-        dateLock = `diagauto-rdv-${String(date_rdv).slice(0, 10)}`;
-        const [[lock]] = await conn.query("SELECT GET_LOCK(?, 5) AS acquired", [dateLock]);
-        if (!lock.acquired) {
-          await conn.rollback();
-          return res.status(409).json({ message: "Date en cours de r\xE9servation. Veuillez r\xE9essayer." });
-        }
-        const count = await getCountForDate(conn, date_rdv, id);
-        if (count >= MAX_PAR_JOUR) {
-          const suggested_date = await findNextAvailableDate(conn, date_rdv, id);
-          await conn.rollback();
-          return res.status(409).json({
-            message: "Cette date est compl\xE8te. Choisissez une autre date.",
-            suggested_date
-          });
-        }
-        await conn.query(
-          `UPDATE rendezvous
-       SET date_rdv = ?, heure_rdv = ?, statut = 'en_attente'
-       WHERE id = ? AND client_id = ?`,
-          [date_rdv, heure_rdv, id, req.user.id]
-        );
-        await conn.commit();
-        res.json({ message: "Rendez-vous report\xE9" });
-      } catch (err) {
-        try {
-          await conn.rollback();
-        } catch {
-        }
-        res.status(500).json({ message: "Erreur serveur", error: err.message });
-      } finally {
-        if (dateLock) {
-          try {
-            await conn.query("SELECT RELEASE_LOCK(?)", [dateLock]);
-          } catch {
-          }
-        }
-        conn.release();
-      }
-    };
-    exports2.changerStatutRdv = async (req, res) => {
-      try {
-        const { id } = req.params;
-        const { statut, notes_admin } = req.body;
-        const [[rdv]] = await db2.query(
-          `SELECT r.client_id, r.date_rdv, r.heure_rdv, v.marque, v.modele, v.immatriculation
-       FROM rendezvous r JOIN vehicules v ON r.vehicule_id = v.id
-       WHERE r.id = ?`,
-          [id]
-        );
-        if (!rdv) return res.status(404).json({ message: "Rendez-vous introuvable" });
-        await db2.query("UPDATE rendezvous SET statut = ?, notes_admin = ? WHERE id = ?", [statut, notes_admin, id]);
-        let whatsapp = null;
-        if (statut === "confirme") {
-          const date = (/* @__PURE__ */ new Date(`${String(rdv.date_rdv).slice(0, 10)}T12:00:00`)).toLocaleDateString("fr-FR");
-          whatsapp = await envoyerWhatsAppClient({
-            clientId: rdv.client_id,
-            type: "rendezvous_confirme",
-            message: `DiagAuto Mada
-Votre rendez-vous est confirm\xE9.
-Date : ${date}
-Heure : ${String(rdv.heure_rdv).slice(0, 5)}
-V\xE9hicule : ${rdv.marque} ${rdv.modele} (${rdv.immatriculation})${notes_admin ? `
-Note : ${notes_admin}` : ""}`
-          });
-        }
-        res.json({ message: "Statut mis \xE0 jour", whatsapp });
-      } catch (err) {
-        res.status(500).json({ message: "Erreur serveur", error: err.message });
       }
     };
   }
@@ -54746,6 +54888,7 @@ var require_systemController = __commonJS({
           "devis",
           "urgences_depannage",
           "notifications_whatsapp",
+          "rendezvous_messages",
           "interventions",
           "rendezvous",
           "vehicules",
@@ -54795,7 +54938,7 @@ var require_systemController = __commonJS({
         resultats.lignes_factures = await deleteLines("facture", factures);
         resultats.lignes_devis = await deleteLines("devis", devis);
         resultats.lignes_proformas = await deleteLines("proforma", proformas);
-        for (const table of ["factures", "proformas", "devis", "urgences_depannage", "notifications_whatsapp", "interventions", "rendezvous", "vehicules"]) {
+        for (const table of ["factures", "proformas", "devis", "urgences_depannage", "notifications_whatsapp", "rendezvous_messages", "interventions", "rendezvous", "vehicules"]) {
           const [result] = await conn.query(`DELETE FROM ${table} WHERE client_id = ?`, [clientId]);
           resultats[table] = result.affectedRows;
         }
@@ -55017,6 +55160,8 @@ var require_routes = __commonJS({
     router.post("/admin/clients/:id/reset-password", verifyToken, isAdmin, clientCtrl.resetPasswordClient);
     router.get("/admin/rendezvous", verifyToken, isAdmin, rdvCtrl.getAllRdv);
     router.post("/admin/rendezvous", verifyToken, isAdmin, rdvCtrl.creerRdvAdmin);
+    router.get("/admin/rendezvous/:id/messages", verifyToken, isAdmin, rdvCtrl.getMessagesRdvAdmin);
+    router.post("/admin/rendezvous/:id/messages", verifyToken, isAdmin, rdvCtrl.envoyerMessageRdvAdmin);
     router.put("/admin/rendezvous/:id/statut", verifyToken, isAdmin, rdvCtrl.changerStatutRdv);
     router.get("/admin/interventions", verifyToken, isAdmin, interCtrl.getAllInterventions);
     router.post("/admin/interventions", verifyToken, isAdmin, interCtrl.creerIntervention);
@@ -55039,6 +55184,10 @@ var require_routes = __commonJS({
     router.post("/client/rendezvous", verifyToken, isClient, rdvCtrl.creerRdv);
     router.get("/client/rendezvous", verifyToken, isClient, rdvCtrl.getMesRdv);
     router.get("/client/rendezvous/tous", verifyToken, isClient, rdvCtrl.getTousRdvActifs);
+    router.get("/client/rendezvous/notifications/stats", verifyToken, isClient, rdvCtrl.getMesRdvNotificationsStats);
+    router.put("/client/rendezvous/notifications/lire", verifyToken, isClient, rdvCtrl.lireMesRdvNotifications);
+    router.get("/client/rendezvous/:id/messages", verifyToken, isClient, rdvCtrl.getMessagesRdvClient);
+    router.post("/client/rendezvous/:id/messages", verifyToken, isClient, rdvCtrl.envoyerMessageRdvClient);
     router.put("/client/rendezvous/:id/annuler", verifyToken, isClient, rdvCtrl.annulerMonRdv);
     router.put("/client/rendezvous/:id/reporter", verifyToken, isClient, rdvCtrl.reporterMonRdv);
     router.get("/client/interventions", verifyToken, isClient, interCtrl.getMesInterventions);

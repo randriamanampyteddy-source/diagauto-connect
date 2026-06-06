@@ -174,6 +174,7 @@ exports.reinitialiserAdmin = async (req, res) => {
       'devis',
       'urgences_depannage',
       'notifications_whatsapp',
+      'rendezvous_messages',
       'interventions',
       'rendezvous',
       'vehicules',
@@ -230,7 +231,7 @@ exports.reinitialiserClient = async (req, res) => {
     resultats.lignes_devis = await deleteLines('devis', devis);
     resultats.lignes_proformas = await deleteLines('proforma', proformas);
 
-    for (const table of ['factures', 'proformas', 'devis', 'urgences_depannage', 'notifications_whatsapp', 'interventions', 'rendezvous', 'vehicules']) {
+    for (const table of ['factures', 'proformas', 'devis', 'urgences_depannage', 'notifications_whatsapp', 'rendezvous_messages', 'interventions', 'rendezvous', 'vehicules']) {
       const [result] = await conn.query(`DELETE FROM ${table} WHERE client_id = ?`, [clientId]);
       resultats[table] = result.affectedRows;
     }

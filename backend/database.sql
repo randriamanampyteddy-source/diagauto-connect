@@ -56,6 +56,20 @@ CREATE TABLE rendezvous (
   FOREIGN KEY (vehicule_id) REFERENCES vehicules(id)
 );
 
+-- Messages rendez-vous client/admin
+CREATE TABLE rendezvous_messages (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  rendezvous_id INT NOT NULL,
+  client_id INT NOT NULL,
+  expediteur VARCHAR(20) NOT NULL,
+  message TEXT NOT NULL,
+  lu_client BOOLEAN DEFAULT FALSE,
+  lu_admin BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (rendezvous_id) REFERENCES rendezvous(id) ON DELETE CASCADE,
+  FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+);
+
 -- Table Interventions
 CREATE TABLE interventions (
   id INT AUTO_INCREMENT PRIMARY KEY,
