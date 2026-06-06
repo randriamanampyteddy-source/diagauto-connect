@@ -53752,7 +53752,7 @@ var require_whatsappService = __commonJS({
         const config = getConfiguration();
         if (!config.configure) {
           const erreur = "WhatsApp automatique non configure. Envoi manuel disponible.";
-          await logNotification({ clientId, type, destinataire, message, statut: "manuel", erreur });
+          await logNotification({ clientId, type, destinataire, message, statut: "configuration_manquante", erreur });
           return buildManualWhatsApp(destinataire, message, erreur);
         }
         const response = await fetchAvecTimeout(`https://graph.facebook.com/${config.graphVersion}/${config.phoneNumberId}/messages`, {
@@ -54578,7 +54578,7 @@ var require_systemController = __commonJS({
           whatsapp_configure: whatsappConfig.configure,
           whatsapp_app_client_url_utilisable: whatsappConfig.app_client_url_utilisable,
           whatsapp_envoyes: await countOne("SELECT COUNT(*) total FROM notifications_whatsapp WHERE statut = 'envoye'"),
-          whatsapp_en_attente: await countOne("SELECT COUNT(*) total FROM notifications_whatsapp WHERE statut IN ('configuration_manquante','numero_manquant','echec','manuel')"),
+          whatsapp_en_attente: await countOne("SELECT COUNT(*) total FROM notifications_whatsapp WHERE statut IN ('configuration_manquante','numero_manquant','echec')"),
           lignes_orphelines: await countOne(
             `SELECT COUNT(*) total FROM lignes_document l
          LEFT JOIN devis d ON l.document_type='devis' AND l.document_id=d.id

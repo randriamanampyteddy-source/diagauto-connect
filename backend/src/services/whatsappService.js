@@ -139,7 +139,7 @@ exports.envoyerWhatsAppClient = async ({ clientId, type, message }) => {
     const config = getConfiguration();
     if (!config.configure) {
       const erreur = 'WhatsApp automatique non configure. Envoi manuel disponible.';
-      await logNotification({ clientId, type, destinataire, message, statut: 'manuel', erreur });
+      await logNotification({ clientId, type, destinataire, message, statut: 'configuration_manquante', erreur });
       return buildManualWhatsApp(destinataire, message, erreur);
     }
 

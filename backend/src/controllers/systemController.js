@@ -24,7 +24,7 @@ exports.getStats = async (req, res) => {
       whatsapp_configure: whatsappConfig.configure,
       whatsapp_app_client_url_utilisable: whatsappConfig.app_client_url_utilisable,
       whatsapp_envoyes: await countOne("SELECT COUNT(*) total FROM notifications_whatsapp WHERE statut = 'envoye'"),
-      whatsapp_en_attente: await countOne("SELECT COUNT(*) total FROM notifications_whatsapp WHERE statut IN ('configuration_manquante','numero_manquant','echec','manuel')"),
+      whatsapp_en_attente: await countOne("SELECT COUNT(*) total FROM notifications_whatsapp WHERE statut IN ('configuration_manquante','numero_manquant','echec')"),
       lignes_orphelines: await countOne(
         `SELECT COUNT(*) total FROM lignes_document l
          LEFT JOIN devis d ON l.document_type='devis' AND l.document_id=d.id
