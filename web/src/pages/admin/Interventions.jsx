@@ -6,7 +6,7 @@ import api from '../../api/axios'
 import { toast } from 'react-toastify'
 import { MdAdd, MdSearch, MdPayment, MdPrint, MdDelete, MdPersonAdd, MdPlaylistAdd } from 'react-icons/md'
 import { CATEGORIES_REPARATION, REPARATIONS_DIESEL_COMMON_RAIL } from '../../data/reparationsDieselCommonRail'
-import { getWhatsAppWarning } from '../../utils/whatsapp'
+import { getWhatsAppWarning, ouvrirWhatsAppManuel } from '../../utils/whatsapp'
 
 const statusColors = {
   en_cours: 'bg-blue-100 text-blue-700',
@@ -169,6 +169,7 @@ const Interventions = () => {
         toast.success('Facture creee et paiement valide !')
         const whatsappWarning = getWhatsAppWarning(paiementData.whatsapp, 'Facture créée et paiement validé')
         if (whatsappWarning) toast.warning(whatsappWarning)
+        if (ouvrirWhatsAppManuel(paiementData.whatsapp)) toast.info('WhatsApp ouvert pour envoyer le message au client')
         navigate(`/documents/facture/${factureId}/imprimer`)
       } else {
         await api.put(`/admin/interventions/${payModal.id}/statut`, { statut: 'termine', date_fin: payForm.date_facture })

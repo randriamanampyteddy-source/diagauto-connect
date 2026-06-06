@@ -206,12 +206,12 @@ const Parametres = () => {
           <h2 className="text-lg font-bold text-gray-800 mb-4">État système</h2>
           {stats ? (
             <>
-              <div className={`rounded-xl p-3 mb-3 border ${whatsappConfigure ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
-                <p className="font-bold text-sm">WhatsApp automatique : {whatsappConfigure ? 'Configuré' : 'Non configuré'}</p>
+              <div className={`rounded-xl p-3 mb-3 border ${whatsappConfigure ? 'bg-green-50 border-green-200 text-green-800' : 'bg-blue-50 border-blue-200 text-blue-800'}`}>
+                <p className="font-bold text-sm">{whatsappConfigure ? 'WhatsApp automatique : Configure' : 'WhatsApp simple : Actif'}</p>
                 <p className="text-xs mt-1">
                   {whatsappConfigure
                     ? `${stats.whatsapp_envoyes} notification(s) envoyée(s).`
-                    : 'Notifications dans l’application actives. Pour l’envoi WhatsApp automatique, renseignez les cles Meta WhatsApp Cloud API sur le serveur.'}
+                    : 'Mode simple actif : l’application ouvre WhatsApp avec le message deja prepare, sans cles Meta.'}
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -396,3 +396,4 @@ const Parametres = () => {
 }
 
 export default Parametres
+

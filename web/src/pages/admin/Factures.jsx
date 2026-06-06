@@ -5,7 +5,7 @@ import AdminQuickClientModal from '../../components/AdminQuickClientModal'
 import api from '../../api/axios'
 import { toast } from 'react-toastify'
 import { MdAdd, MdDelete, MdPayment, MdPersonAdd, MdPrint, MdSearch } from 'react-icons/md'
-import { getWhatsAppWarning } from '../../utils/whatsapp'
+import { getWhatsAppWarning, ouvrirWhatsAppManuel } from '../../utils/whatsapp'
 
 const statusColors = {
   non_payee:          'bg-red-100 text-red-700',
@@ -117,6 +117,7 @@ const Factures = () => {
       toast.success('Paiement enregistré')
       const whatsappWarning = getWhatsAppWarning(data.whatsapp, 'Paiement validé')
       if (whatsappWarning) toast.warning(whatsappWarning)
+      if (ouvrirWhatsAppManuel(data.whatsapp)) toast.info('WhatsApp ouvert pour envoyer le message au client')
       setPaiementModal(null)
       load()
     } catch { toast.error('Erreur') }

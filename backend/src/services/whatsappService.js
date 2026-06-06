@@ -8,6 +8,15 @@ const normalizeNumber = (value) => {
   return number;
 };
 
+const buildManualWhatsApp = (destinataire, message, erreur) => ({
+  statut: 'manuel',
+  mode: 'manuel',
+  destinataire,
+  erreur,
+  lien_whatsapp: `https://wa.me/${destinataire}?text=${encodeURIComponent(message)}`,
+  lien_app: `whatsapp://send?phone=${destinataire}&text=${encodeURIComponent(message)}`,
+});
+
 const logNotification = async ({ clientId, type, destinataire, message, statut, erreur = null }) => {
   try {
     await db.query(
@@ -129,9 +138,9 @@ exports.envoyerWhatsAppClient = async ({ clientId, type, message }) => {
 
     const config = getConfiguration();
     if (!config.configure) {
-      const erreur = 'WHATSAPP_PHONE_NUMBER_ID et/ou WHATSAPP_API_TOKEN manquant.';
-      await logNotification({ clientId, type, destinataire, message, statut: 'configuration_manquante', erreur });
-      return { statut: 'configuration_manquante', erreur };
+      const erreur = 'WhatsApp automatique non configure. Envoi manuel disponible.';
+      await logNotification({ clientId, type, destinataire, message, statut: 'manuel', erreur });
+      return buildManualWhatsApp(destinataire, message, erreur);
     }
 
     const response = await fetchAvecTimeout(`https://graph.facebook.com/${config.graphVersion}/${config.phoneNumberId}/messages`, {
@@ -155,6 +164,9 @@ exports.envoyerWhatsAppClient = async ({ clientId, type, message }) => {
   } catch (err) {
     const erreur = err.name === 'AbortError' ? 'Délai d’envoi WhatsApp dépassé.' : err.message;
     await logNotification({ clientId, type, destinataire, message, statut: 'echec', erreur });
+    if (destinataire) {
+      return buildManualWhatsApp(destinataire, message, erreur);
+    }
     return { statut: 'echec', erreur };
   }
 };

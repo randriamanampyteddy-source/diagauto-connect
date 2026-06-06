@@ -3,6 +3,7 @@ import AdminLayout from '../../components/AdminLayout'
 import api from '../../api/axios'
 import { toast } from 'react-toastify'
 import { MdCall, MdLocationOn, MdMessage, MdRefresh, MdVisibility, MdWarning } from 'react-icons/md'
+import { getWhatsAppWarning, ouvrirWhatsAppManuel } from '../../utils/whatsapp'
 
 const statusColors = {
   nouveau: 'bg-red-100 text-red-700',
@@ -48,8 +49,11 @@ const Urgences = () => {
 
   const update = async (u, statut, reponse = undefined) => {
     try {
-      await api.put(`/admin/urgences/${u.id}`, { statut, reponse_admin: reponse })
+      const { data } = await api.put(`/admin/urgences/${u.id}`, { statut, reponse_admin: reponse })
       toast.success('Urgence mise à jour')
+      const whatsappWarning = getWhatsAppWarning(data.whatsapp, 'Reponse urgence envoyee')
+      if (whatsappWarning) toast.warning(whatsappWarning)
+      if (ouvrirWhatsAppManuel(data.whatsapp)) toast.info('WhatsApp ouvert pour envoyer le message au client')
       await load()
       window.dispatchEvent(new Event('urgences-refresh'))
     } catch (err) {

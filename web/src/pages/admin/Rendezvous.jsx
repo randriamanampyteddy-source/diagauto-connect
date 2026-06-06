@@ -4,7 +4,7 @@ import AdminQuickClientModal from '../../components/AdminQuickClientModal'
 import api from '../../api/axios'
 import { toast } from 'react-toastify'
 import { MdAdd, MdPersonAdd, MdSearch } from 'react-icons/md'
-import { getWhatsAppWarning } from '../../utils/whatsapp'
+import { getWhatsAppWarning, ouvrirWhatsAppManuel } from '../../utils/whatsapp'
 
 const statusColors = {
   en_attente: 'bg-yellow-100 text-yellow-700',
@@ -51,6 +51,7 @@ const Rendezvous = () => {
       toast.success('Rendez-vous cree et confirme')
       const warning = getWhatsAppWarning(data.whatsapp, 'RDV confirme')
       if (warning) toast.warning(warning)
+      if (ouvrirWhatsAppManuel(data.whatsapp)) toast.info('WhatsApp ouvert pour envoyer le message au client')
       setCreateModal(false)
       setCreateForm(emptyCreateForm)
       setVehicules([])
@@ -72,6 +73,7 @@ const Rendezvous = () => {
       toast.success('Statut mis a jour')
       const warning = editForm.statut === 'confirme' ? getWhatsAppWarning(data.whatsapp, 'RDV valide') : null
       if (warning) toast.warning(warning)
+      if (ouvrirWhatsAppManuel(data.whatsapp)) toast.info('WhatsApp ouvert pour envoyer le message au client')
       setEditModal(null)
       load()
     } catch {

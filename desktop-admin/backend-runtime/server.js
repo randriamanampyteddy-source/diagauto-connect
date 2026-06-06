@@ -4625,7 +4625,7 @@ var require_dbcs_data = __commonJS({
       // == Japanese/ShiftJIS ====================================================
       // All japanese encodings are based on JIS X set of standards:
       // JIS X 0201 - Single-byte encoding of ASCII + ¥ + Kana chars at 0xA1-0xDF.
-      // JIS X 0208 - Main set of 6879 characters, placed in 94x94 plane, to be encoded by 2 bytes.
+      // JIS X 0208 - Main set of 6879 characters, placed in 94x94 plane, to be encoded by 2 bytes. 
       //              Has several variations in 1978, 1983, 1990 and 1997.
       // JIS X 0212 - Supplementary plane of 6067 chars in 94x94 plane. 1990. Effectively dead.
       // JIS X 0213 - Extension and modern replacement of 0208 and 0212. Total chars: 11233.
@@ -4642,7 +4642,7 @@ var require_dbcs_data = __commonJS({
       //               0x8F, (0xA1-0xFE)x2 - 0212 plane (94x94).
       //  * JIS X 208: 7-bit, direct encoding of 0208. Byte ranges: 0x21-0x7E (94 values). Uncommon.
       //               Used as-is in ISO2022 family.
-      //  * ISO2022-JP: Stateful encoding, with escape sequences to switch between ASCII,
+      //  * ISO2022-JP: Stateful encoding, with escape sequences to switch between ASCII, 
       //                0201-1976 Roman, 0208-1978, 0208-1983.
       //  * ISO2022-JP-1: Adds esc seq for 0212-1990.
       //  * ISO2022-JP-2: Adds esc seq for GB2313-1980, KSX1001-1992, ISO8859-1, ISO8859-7.
@@ -4753,7 +4753,7 @@ var require_dbcs_data = __commonJS({
       //  * Windows CP 951: Microsoft variant of Big5-HKSCS-2001. Seems to be never public. http://me.abelcheung.org/articles/research/what-is-cp951/
       //  * Big5-2003 (Taiwan standard) almost superset of cp950.
       //  * Unicode-at-on (UAO) / Mozilla 1.8. Falling out of use on the Web. Not supported by other browsers.
-      //  * Big5-HKSCS (-2001, -2004, -2008). Hong Kong standard.
+      //  * Big5-HKSCS (-2001, -2004, -2008). Hong Kong standard. 
       //    many unicode code points moved from PUA to Supplementary plane (U+2XXXX) over the years.
       //    Plus, it has 4 combining sequences.
       //    Seems that Mozilla refused to support it for 10 yrs. https://bugzilla.mozilla.org/show_bug.cgi?id=162431 https://bugzilla.mozilla.org/show_bug.cgi?id=310299
@@ -4764,7 +4764,7 @@ var require_dbcs_data = __commonJS({
       //    In the encoder, it might make sense to support encoding old PUA mappings to Big5 bytes seq-s.
       //    Official spec: http://www.ogcio.gov.hk/en/business/tech_promotion/ccli/terms/doc/2003cmp_2008.txt
       //                   http://www.ogcio.gov.hk/tc/business/tech_promotion/ccli/terms/doc/hkscs-2008-big5-iso.txt
-      //
+      // 
       // Current understanding of how to deal with Big5(-HKSCS) is in the Encoding Standard, http://encoding.spec.whatwg.org/#big5-encoder
       // Unicode mapping (http://www.unicode.org/Public/MAPPINGS/OBSOLETE/EASTASIA/OTHER/BIG5.TXT) is said to be wrong.
       "windows950": "cp950",
@@ -53635,6 +53635,14 @@ var require_whatsappService = __commonJS({
       if (number.length < 8 || number.length > 15) return "";
       return number;
     };
+    var buildManualWhatsApp = (destinataire, message, erreur) => ({
+      statut: "manuel",
+      mode: "manuel",
+      destinataire,
+      erreur,
+      lien_whatsapp: `https://wa.me/${destinataire}?text=${encodeURIComponent(message)}`,
+      lien_app: `whatsapp://send?phone=${destinataire}&text=${encodeURIComponent(message)}`
+    });
     var logNotification = async ({ clientId, type, destinataire, message, statut, erreur = null }) => {
       try {
         await db2.query(
@@ -53743,9 +53751,9 @@ var require_whatsappService = __commonJS({
         }
         const config = getConfiguration();
         if (!config.configure) {
-          const erreur = "WHATSAPP_PHONE_NUMBER_ID et/ou WHATSAPP_API_TOKEN manquant.";
-          await logNotification({ clientId, type, destinataire, message, statut: "configuration_manquante", erreur });
-          return { statut: "configuration_manquante", erreur };
+          const erreur = "WhatsApp automatique non configure. Envoi manuel disponible.";
+          await logNotification({ clientId, type, destinataire, message, statut: "manuel", erreur });
+          return buildManualWhatsApp(destinataire, message, erreur);
         }
         const response = await fetchAvecTimeout(`https://graph.facebook.com/${config.graphVersion}/${config.phoneNumberId}/messages`, {
           method: "POST",
@@ -53768,6 +53776,9 @@ var require_whatsappService = __commonJS({
       } catch (err) {
         const erreur = err.name === "AbortError" ? "D\xE9lai d\u2019envoi WhatsApp d\xE9pass\xE9." : err.message;
         await logNotification({ clientId, type, destinataire, message, statut: "echec", erreur });
+        if (destinataire) {
+          return buildManualWhatsApp(destinataire, message, erreur);
+        }
         return { statut: "echec", erreur };
       }
     };
@@ -54567,7 +54578,7 @@ var require_systemController = __commonJS({
           whatsapp_configure: whatsappConfig.configure,
           whatsapp_app_client_url_utilisable: whatsappConfig.app_client_url_utilisable,
           whatsapp_envoyes: await countOne("SELECT COUNT(*) total FROM notifications_whatsapp WHERE statut = 'envoye'"),
-          whatsapp_en_attente: await countOne("SELECT COUNT(*) total FROM notifications_whatsapp WHERE statut IN ('configuration_manquante','numero_manquant','echec')"),
+          whatsapp_en_attente: await countOne("SELECT COUNT(*) total FROM notifications_whatsapp WHERE statut IN ('configuration_manquante','numero_manquant','echec','manuel')"),
           lignes_orphelines: await countOne(
             `SELECT COUNT(*) total FROM lignes_document l
          LEFT JOIN devis d ON l.document_type='devis' AND l.document_id=d.id
