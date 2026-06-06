@@ -1,6 +1,27 @@
 const db = require('../config/db');
 
 let urgenceMessagesReady = false;
+let urgenceColumnsReady = false;
+
+const ensureUrgenceColumns = async () => {
+  if (urgenceColumnsReady) return;
+  const statements = db.type === 'postgres'
+    ? [
+        'ALTER TABLE urgences_depannage ADD COLUMN IF NOT EXISTS numero_vehicule VARCHAR(100)',
+      ]
+    : [
+        'ALTER TABLE urgences_depannage ADD COLUMN IF NOT EXISTS numero_vehicule VARCHAR(100) NULL',
+        "ALTER TABLE urgences_depannage MODIFY zone ENUM('route_nationale', 'province', 'antananarivo', 'hors_antananarivo', 'autre') DEFAULT 'route_nationale'",
+      ];
+  for (const sql of statements) {
+    try {
+      await db.query(sql);
+    } catch (err) {
+      if (!/duplicate|exists|syntax/i.test(String(err.message))) throw err;
+    }
+  }
+  urgenceColumnsReady = true;
+};
 
 const parseLocalisation = (value) => {
   try {
@@ -96,10 +117,16 @@ const ajouterMessageUrgence = async ({ urgenceId, clientId, expediteur, message 
 
 exports.creerUrgence = async (req, res) => {
   try {
-    const { telephone, latitude, longitude, precision, zone, message } = req.body;
+    await ensureUrgenceColumns();
+    const { telephone, numero_vehicule, latitude, longitude, precision, zone, message } = req.body;
     if (!telephone || !String(telephone).trim()) {
       return res.status(400).json({ message: 'Numero telephone obligatoire' });
     }
+    if (!numero_vehicule || !String(numero_vehicule).trim()) {
+      return res.status(400).json({ message: 'Numero du vehicule obligatoire' });
+    }
+    const allowedZones = ['route_nationale', 'province', 'antananarivo', 'hors_antananarivo'];
+    const zoneValue = allowedZones.includes(zone) ? zone : 'route_nationale';
 
     const lat = Number(latitude);
     const lng = Number(longitude);
@@ -117,9 +144,9 @@ exports.creerUrgence = async (req, res) => {
       precision: Number.isFinite(accuracy) ? Math.round(accuracy) : null,
     });
     const [result] = await db.query(
-      `INSERT INTO urgences_depannage (client_id, telephone, localisation, zone, message)
-       VALUES (?, ?, ?, ?, ?)`,
-      [req.user.id, telephone, localisation, zone || 'route_nationale', message]
+      `INSERT INTO urgences_depannage (client_id, telephone, numero_vehicule, localisation, zone, message)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [req.user.id, telephone, numero_vehicule, localisation, zoneValue, message]
     );
     res.status(201).json({ message: 'Urgence envoyee', id: result.insertId });
   } catch (err) {
@@ -129,6 +156,7 @@ exports.creerUrgence = async (req, res) => {
 
 exports.getMesUrgences = async (req, res) => {
   try {
+    await ensureUrgenceColumns();
     const [rows] = await db.query(
       `SELECT * FROM urgences_depannage
        WHERE client_id = ?
@@ -187,6 +215,7 @@ exports.lireMesNotifications = async (req, res) => {
 
 exports.getAllUrgences = async (req, res) => {
   try {
+    await ensureUrgenceColumns();
     const [rows] = await db.query(
       `SELECT u.*, c.id_client, c.nom, c.prenom, c.email, c.telephone AS client_telephone
        FROM urgences_depannage u

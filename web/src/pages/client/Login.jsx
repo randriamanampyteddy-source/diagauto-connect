@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 import api from '../../api/axios'
 import { toast } from 'react-toastify'
 import { MdDirectionsCar, MdBadge, MdLock, MdVisibility, MdVisibilityOff } from 'react-icons/md'
+import { getDeviceId } from '../../utils/deviceId'
 
 const ClientLogin = () => {
   const [form, setForm] = useState({ id_client: '', password: '' })
@@ -16,7 +17,7 @@ const ClientLogin = () => {
     e.preventDefault()
     setLoading(true)
     try {
-      const { data } = await api.post('/auth/client/login', form)
+      const { data } = await api.post('/auth/client/login', { ...form, device_id: getDeviceId() })
       login(data.user, data.token)
       navigate('/dashboard')
     } catch (err) {

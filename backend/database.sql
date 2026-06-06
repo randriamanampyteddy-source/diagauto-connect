@@ -28,6 +28,16 @@ CREATE TABLE clients (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Appareils autorises par client (2 telephones maximum par ID client)
+CREATE TABLE client_devices (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  client_id INT NOT NULL,
+  device_hash VARCHAR(128) UNIQUE NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+);
+
 -- Table Vehicules
 CREATE TABLE vehicules (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -166,8 +176,9 @@ CREATE TABLE urgences_depannage (
   id INT AUTO_INCREMENT PRIMARY KEY,
   client_id INT NOT NULL,
   telephone VARCHAR(50) NOT NULL,
+  numero_vehicule VARCHAR(100) NOT NULL,
     localisation VARCHAR(255) NOT NULL,
-  zone ENUM('route_nationale', 'hors_antananarivo', 'antananarivo', 'autre') DEFAULT 'route_nationale',
+  zone ENUM('route_nationale', 'province', 'antananarivo', 'hors_antananarivo') DEFAULT 'route_nationale',
   message TEXT NOT NULL,
   reponse_admin TEXT,
   client_notification_non_lue BOOLEAN DEFAULT FALSE,

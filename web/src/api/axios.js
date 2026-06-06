@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { getApiBaseUrl } from '../utils/apiServer'
+import { getDeviceId } from '../utils/deviceId'
 
 const api = axios.create({
   baseURL: getApiBaseUrl()
@@ -8,6 +9,7 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
   if (token) config.headers.Authorization = `Bearer ${token}`
+  config.headers['X-Device-Id'] = getDeviceId()
   return config
 })
 

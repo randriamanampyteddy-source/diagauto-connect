@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import api from '../../api/axios'
 import { playUrgenceSound } from '../../utils/alertSound'
-import { MdArrowBack, MdCall, MdLocationOn, MdMyLocation, MdSend, MdWarning } from 'react-icons/md'
+import { MdArrowBack, MdCall, MdLocationOn, MdSend, MdWarning } from 'react-icons/md'
 
 const ADMIN_PHONE = '0346172132'
 
@@ -18,6 +18,7 @@ const statusLabels = {
 const UrgenceClient = () => {
   const [form, setForm] = useState({
     telephone: '',
+    numero_vehicule: '',
     zone: 'route_nationale',
     latitude: '',
     longitude: '',
@@ -83,9 +84,9 @@ const UrgenceClient = () => {
       },
       (error) => {
         setLocalisationStatus('erreur')
-        toast.error(error.code === 1
-          ? 'Activez et autorisez la localisation pour envoyer l urgence'
-          : 'Impossible d obtenir votre position exacte. Reessayez dehors ou activez le GPS.')
+        if (error.code === 1) {
+          toast.error('Autorisation localisation refusee. Activez la permission GPS pour envoyer l urgence.')
+        }
       },
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     )
@@ -113,12 +114,16 @@ const UrgenceClient = () => {
       toast.error('Numero telephone obligatoire')
       return
     }
+    if (!form.numero_vehicule.trim()) {
+      toast.error('Numero du vehicule obligatoire')
+      return
+    }
     if (!form.message.trim()) {
       toast.error('Message obligatoire')
       return
     }
     if (!form.latitude || !form.longitude || localisationStatus !== 'ok') {
-      toast.error('Localisation GPS exacte obligatoire')
+      toast.error('Position exacte non disponible. Activez le GPS puis reessayez.')
       localiser()
       return
     }
@@ -181,40 +186,17 @@ const UrgenceClient = () => {
               <input className="input" value={form.telephone} onChange={e => setForm(f => ({ ...f, telephone: e.target.value }))} placeholder="Votre numero joignable" />
             </div>
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">N° du vehicule obligatoire</label>
+              <input className="input uppercase" value={form.numero_vehicule} onChange={e => setForm(f => ({ ...f, numero_vehicule: e.target.value.toUpperCase() }))} placeholder="Immatriculation ou numero du fiara" />
+            </div>
+            <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Zone</label>
               <select className="input" value={form.zone} onChange={e => setForm(f => ({ ...f, zone: e.target.value }))}>
                 <option value="route_nationale">Route nationale</option>
-                <option value="hors_antananarivo">Hors Antananarivo</option>
+                <option value="province">Province</option>
                 <option value="antananarivo">Antananarivo</option>
-                <option value="autre">Autre</option>
+                <option value="hors_antananarivo">Hors Antananarivo</option>
               </select>
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Localisation GPS obligatoire</label>
-              <div className={`rounded-xl border p-3 ${localisationStatus === 'ok' ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50'}`}>
-                <div className="flex items-center gap-3">
-                  <MdLocationOn size={22} className={localisationStatus === 'ok' ? 'text-green-700' : 'text-red-700'} />
-                  <div className="flex-1 min-w-0">
-                    {localisationStatus === 'ok' ? (
-                      <>
-                        <p className="text-sm font-semibold text-green-900">Position exacte obtenue</p>
-                        <p className="text-xs text-green-800 break-all">{form.latitude}, {form.longitude} - precision +/-{form.precision} m</p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-sm font-semibold text-red-900">
-                          {localisationStatus === 'chargement' ? 'Recherche de votre position...' : 'Position GPS obligatoire'}
-                        </p>
-                        <p className="text-xs text-red-800">Activez la localisation de l appareil puis reessayez.</p>
-                      </>
-                    )}
-                  </div>
-                  <button type="button" onClick={localiser} className="w-11 h-11 bg-white border border-gray-200 rounded-xl flex items-center justify-center shrink-0" title="Actualiser la position">
-                    <MdMyLocation size={21} />
-                  </button>
-                </div>
-              </div>
             </div>
 
             <div className="md:col-span-2">
@@ -224,7 +206,7 @@ const UrgenceClient = () => {
           </div>
 
           <div className="urgence-submit-bar mt-5">
-            <button disabled={loading || localisationStatus !== 'ok'} className="w-full bg-red-700 hover:bg-red-800 text-white px-5 py-4 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50">
+            <button disabled={loading} className="w-full bg-red-700 hover:bg-red-800 text-white px-5 py-4 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50">
               <MdSend size={20} /> {loading ? 'Envoi...' : 'Envoyer l alerte urgence'}
             </button>
           </div>
@@ -248,7 +230,8 @@ const UrgenceClient = () => {
                   <button type="button" onClick={() => selectUrgence(u.id)} className="w-full text-left">
                     <div className="flex justify-between gap-3">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-gray-800">{statusLabels[u.statut] || u.statut}</span>
+                    <span className="font-semibold text-gray-800">{statusLabels[u.statut] || u.statut}</span>
+                    {u.numero_vehicule && <span className="text-xs font-mono bg-white border px-2 py-0.5 rounded-lg">{u.numero_vehicule}</span>}
                       </div>
                       <span className="text-xs text-gray-400">{new Date(u.created_at).toLocaleString('fr-FR')}</span>
                     </div>

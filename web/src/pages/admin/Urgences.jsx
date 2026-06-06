@@ -22,9 +22,9 @@ const statusLabels = {
 
 const zoneLabels = {
   route_nationale: 'Route nationale',
+  province: 'Province',
   hors_antananarivo: 'Hors Antananarivo',
   antananarivo: 'Antananarivo',
-  autre: 'Autre',
 }
 
 const Urgences = () => {
@@ -133,16 +133,28 @@ const Urgences = () => {
                   </div>
                   <h2 className="font-bold text-gray-800">{u.prenom} {u.nom} <span className="font-mono text-primary">{u.id_client}</span></h2>
                   <p className="text-sm text-gray-500 mt-1">Telephone urgence : <strong>{u.telephone}</strong></p>
+                  <p className="text-sm text-gray-500 mt-1">N° fiara : <strong className="font-mono text-gray-900">{u.numero_vehicule || '-'}</strong></p>
                   {u.gps ? (
-                    <a
-                      href={u.gps.carte_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-sm text-blue-700 font-semibold flex items-center gap-1 mt-1"
-                    >
-                      <MdLocationOn /> Position exacte - {u.gps.latitude}, {u.gps.longitude}
-                      {u.gps.precision && ` - +/-${u.gps.precision} m`}
-                    </a>
+                    <div className="mt-2">
+                      <a
+                        href={u.gps.carte_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sm text-blue-700 font-semibold flex items-center gap-1"
+                      >
+                        <MdLocationOn /> Carte position exacte - {u.numero_vehicule || 'vehicule'} - {u.gps.latitude}, {u.gps.longitude}
+                        {u.gps.precision && ` - +/-${u.gps.precision} m`}
+                      </a>
+                      <div className="mt-2 overflow-hidden rounded-xl border border-gray-200 bg-gray-50">
+                        <iframe
+                          title={`Position urgence ${u.numero_vehicule || u.id}`}
+                          className="w-full h-48"
+                          loading="lazy"
+                          src={`https://maps.google.com/maps?q=${u.gps.latitude},${u.gps.longitude}&z=16&output=embed`}
+                        />
+                        <p className="text-xs font-semibold text-gray-700 px-3 py-2">Repere carte: {u.numero_vehicule || 'Numero vehicule non renseigne'}</p>
+                      </div>
+                    </div>
                   ) : (
                     <p className="text-sm text-red-700 font-semibold">Localisation GPS non disponible</p>
                   )}
