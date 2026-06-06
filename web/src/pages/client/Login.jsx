@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import ApiServerConfig from '../../components/ApiServerConfig'
 import api from '../../api/axios'
 import { toast } from 'react-toastify'
 import { MdDirectionsCar, MdBadge, MdLock, MdVisibility, MdVisibilityOff } from 'react-icons/md'
@@ -106,7 +105,6 @@ const ClientLogin = () => {
               S'inscrire
             </Link>
           </p>
-          <ApiServerConfig compact />
         </div>
 
         <p className="text-center text-xs text-gray-300 mt-4">© DiagAuto Connect</p>

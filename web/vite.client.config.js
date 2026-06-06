@@ -5,6 +5,9 @@ import { resolve } from 'node:path'
 
 // Port 3000 — Espace Client uniquement
 export default defineConfig({
+  define: {
+    'import.meta.env.VITE_CLIENT_LOCK_API_BASE_URL': JSON.stringify('true')
+  },
   plugins: [
     react(),
     {

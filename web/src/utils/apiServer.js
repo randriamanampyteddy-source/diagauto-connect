@@ -9,8 +9,11 @@ export const normalizeApiBaseUrl = (value) => {
 }
 
 export const getApiBaseUrl = () => {
+  const envUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL) || '/api'
+  if (import.meta.env.VITE_CLIENT_LOCK_API_BASE_URL === 'true') return envUrl
+
   const saved = normalizeApiBaseUrl(localStorage.getItem(STORAGE_KEY))
-  return saved || import.meta.env.VITE_API_BASE_URL || '/api'
+  return saved || envUrl
 }
 
 export const setApiBaseUrl = (value) => {

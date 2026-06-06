@@ -38,6 +38,44 @@ if (updateDirectory) {
   app.use('/updates', express.static(updateDirectory, { index: false, dotfiles: 'deny' }));
 }
 
+const clientApkPath = path.join(__dirname, 'public', 'downloads', 'DiagAuto-Client.apk');
+app.get('/download/client.apk', (req, res) => {
+  if (!fs.existsSync(clientApkPath)) {
+    res.status(404).send('APK client introuvable');
+    return;
+  }
+  res.download(clientApkPath, 'DiagAuto-Client.apk');
+});
+
+app.get('/download/client', (req, res) => {
+  res.type('html').send(`<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DiagAuto Client - Installation</title>
+  <style>
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f3f6fa;color:#102033;font-family:Arial,sans-serif;padding:24px}
+    main{width:min(460px,100%);background:white;border:1px solid #dde4ef;border-radius:12px;padding:24px;box-shadow:0 16px 45px rgba(16,32,51,.12)}
+    .logo{width:64px;height:64px;border-radius:50%;background:#183f6c;color:white;display:grid;place-items:center;font-weight:800;margin:0 auto 14px}
+    h1{text-align:center;margin:0 0 8px;font-size:24px}
+    p{color:#667085;line-height:1.45}
+    a{display:block;text-align:center;background:#183f6c;color:white;text-decoration:none;font-weight:800;border-radius:10px;padding:14px 16px;margin:18px 0}
+    small{display:block;color:#667085;text-align:center}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="logo">DA</div>
+    <h1>DiagAuto Client</h1>
+    <p>Appuyez sur le bouton ci-dessous pour telecharger l'application client DiagAuto Mada.</p>
+    <a href="/download/client.apk">Telecharger l'APK</a>
+    <small>Sur Android, autorisez l'installation depuis le navigateur si le telephone le demande.</small>
+  </main>
+</body>
+</html>`);
+});
+
 app.use('/api', routes);
 
 app.get('/', (req, res) => res.json({ message: 'DiagAuto Connect API is running' }));
