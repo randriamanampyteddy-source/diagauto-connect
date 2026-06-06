@@ -22,8 +22,25 @@ const Vehicules = () => {
 
   useEffect(() => { load() }, [])
 
-  const modelesSuggeres = CATALOGUE[form.marque] || []
   const set = (field, val) => setForm(f => ({ ...f, [field]: val }))
+  const marqueCatalogue = MARQUES.find(m => m.toLowerCase() === form.marque.trim().toLowerCase())
+  const modelesSuggeres = marqueCatalogue ? CATALOGUE[marqueCatalogue] : []
+
+  const changerMarque = (value) => {
+    setForm(f => {
+      const ancienneMarque = MARQUES.find(m => m.toLowerCase() === f.marque.trim().toLowerCase())
+      const nouvelleMarque = MARQUES.find(m => m.toLowerCase() === value.trim().toLowerCase())
+      return {
+        ...f,
+        marque: value,
+        modele: nouvelleMarque && nouvelleMarque !== ancienneMarque ? '' : f.modele,
+      }
+    })
+  }
+
+  const effacerMarque = () => {
+    setForm(f => ({ ...f, marque: '', modele: '' }))
+  }
 
   const ajouter = async (e) => {
     e.preventDefault()
@@ -89,14 +106,25 @@ const Vehicules = () => {
             <form onSubmit={ajouter} className="flex flex-col gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Marque *</label>
-                <input
-                  list="liste-marques"
-                  className="input"
-                  placeholder="Ex: Toyota, Mitsubishi..."
-                  value={form.marque}
-                  onChange={e => { set('marque', e.target.value); set('modele', '') }}
-                  required
-                />
+                <div className="flex gap-2">
+                  <input
+                    list="liste-marques"
+                    className="input flex-1 min-w-0"
+                    placeholder="Ex: Toyota, Mitsubishi..."
+                    value={form.marque}
+                    onChange={e => changerMarque(e.target.value)}
+                    required
+                  />
+                  {form.marque && (
+                    <button
+                      type="button"
+                      onClick={effacerMarque}
+                      className="px-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 shrink-0"
+                    >
+                      Changer
+                    </button>
+                  )}
+                </div>
                 <datalist id="liste-marques">
                   {MARQUES.map(m => <option key={m} value={m} />)}
                 </datalist>
