@@ -78,6 +78,8 @@ CREATE TABLE interventions (
   vehicule_id INT NOT NULL,
   description TEXT NOT NULL,
   technicien VARCHAR(100),
+  dernier_kilometrage INT,
+  numero_vehicule_archive VARCHAR(100),
   date_debut DATE,
   date_fin DATE,
   statut ENUM('en_cours', 'termine', 'suspendu') DEFAULT 'en_cours',

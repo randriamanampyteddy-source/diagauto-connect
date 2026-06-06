@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import AdminLayout from '../../components/AdminLayout'
 import AdminQuickClientModal from '../../components/AdminQuickClientModal'
 import api from '../../api/axios'
 import { toast } from 'react-toastify'
-import { MdAdd, MdMessage, MdPersonAdd, MdSearch } from 'react-icons/md'
+import { MdAdd, MdMessage, MdPersonAdd, MdSearch, MdSend } from 'react-icons/md'
+import { playUrgenceSound } from '../../utils/alertSound'
 
 const statusColors = {
   en_attente: 'bg-yellow-100 text-yellow-700',
@@ -13,6 +14,7 @@ const statusColors = {
 }
 const statusLabels = { en_attente: 'En attente', confirme: 'Confirme', annule: 'Annule', termine: 'Termine' }
 const emptyCreateForm = { client_id: '', vehicule_id: '', date_rdv: '', heure_rdv: '', motif: '', notes_admin: '' }
+const EMOJIS = ['👍', '🙏', '✅', '❌', '🔧', '🚗', '📍', '⏰', '📞', '💬', '🙂', '👌']
 
 const Rendezvous = () => {
   const [rdvs, setRdvs] = useState([])
@@ -27,12 +29,18 @@ const Rendezvous = () => {
   const [messagesModal, setMessagesModal] = useState(null)
   const [messages, setMessages] = useState([])
   const [messageText, setMessageText] = useState('')
+  const latestMessageId = useRef(0)
 
   const load = () => {
     api.get('/admin/rendezvous').then(r => setRdvs(r.data)).catch(() => {})
     api.get('/admin/clients').then(r => setClients(r.data.filter(c => c.statut === 'actif'))).catch(() => {})
   }
   useEffect(() => { load() }, [])
+
+  useEffect(() => {
+    const timer = setInterval(load, 5000)
+    return () => clearInterval(timer)
+  }, [])
 
   const onClientChange = async (clientId) => {
     setCreateForm(current => ({ ...current, client_id: clientId, vehicule_id: '' }))
@@ -87,18 +95,38 @@ const Rendezvous = () => {
     try {
       const { data } = await api.get(`/admin/rendezvous/${rdv.id}/messages`)
       setMessages(data)
+      latestMessageId.current = Number(data.at(-1)?.id) || 0
+      setRdvs(current => current.map(item => item.id === rdv.id ? { ...item, unread_count: 0 } : item))
     } catch {
       toast.error('Impossible de charger les messages')
     }
   }
+
+  const refreshMessages = async (rdvId, notify = false) => {
+    const { data } = await api.get(`/admin/rendezvous/${rdvId}/messages`)
+    const last = data.at(-1)
+    const lastId = Number(last?.id) || 0
+    if (notify && lastId > latestMessageId.current && last?.expediteur === 'client') {
+      playUrgenceSound()
+    }
+    latestMessageId.current = lastId || latestMessageId.current
+    setMessages(data)
+  }
+
+  useEffect(() => {
+    if (!messagesModal) return undefined
+    const timer = setInterval(() => {
+      refreshMessages(messagesModal.id, true).catch(() => {})
+    }, 2000)
+    return () => clearInterval(timer)
+  }, [messagesModal])
 
   const envoyerMessage = async () => {
     if (!messageText.trim() || !messagesModal) return
     try {
       await api.post(`/admin/rendezvous/${messagesModal.id}/messages`, { message: messageText })
       setMessageText('')
-      const { data } = await api.get(`/admin/rendezvous/${messagesModal.id}/messages`)
-      setMessages(data)
+      await refreshMessages(messagesModal.id)
       toast.success('Message envoye')
     } catch (err) {
       toast.error(err.response?.data?.message || 'Envoi impossible')
@@ -150,6 +178,9 @@ const Rendezvous = () => {
                     <button onClick={() => openEditModal(r)} className="btn-primary text-xs py-1 px-3">Modifier</button>
                     <button onClick={() => ouvrirMessages(r)} className="bg-blue-600 hover:bg-blue-700 text-white text-xs py-1 px-3 rounded-xl flex items-center gap-1">
                       <MdMessage size={14} /> Messages
+                      {Number(r.unread_count) > 0 && (
+                        <span className="bg-red-500 text-white min-w-5 h-5 px-1 rounded-full flex items-center justify-center text-[10px]">{r.unread_count}</span>
+                      )}
                     </button>
                   </div>
                 </td>
@@ -253,8 +284,22 @@ const Rendezvous = () => {
               {messages.length === 0 && <p className="text-sm text-gray-400 text-center py-8">Aucun message.</p>}
             </div>
             <div className="mt-3 flex gap-2">
-              <textarea className="input flex-1" rows={2} value={messageText} onChange={e => setMessageText(e.target.value)} placeholder="Repondre au client..." />
-              <button onClick={envoyerMessage} className="btn-primary px-4 flex items-center gap-2"><MdMessage /> Envoyer</button>
+              <div className="flex-1 min-w-0">
+                <div className="flex gap-1 mb-2 overflow-x-auto pb-1">
+                  {EMOJIS.map(emoji => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => setMessageText(text => `${text}${emoji}`)}
+                      className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 text-lg shrink-0"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+                <textarea className="input w-full" rows={2} value={messageText} onChange={e => setMessageText(e.target.value)} placeholder="Repondre au client..." />
+              </div>
+              <button onClick={envoyerMessage} className="btn-primary px-4 flex items-center gap-2 self-end"><MdSend /> Envoyer</button>
             </div>
             <div className="flex justify-end mt-3">
               <button onClick={() => setMessagesModal(null)} className="px-4 py-2 border rounded-xl text-gray-600">Fermer</button>

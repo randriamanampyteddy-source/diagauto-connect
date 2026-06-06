@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../../api/axios'
 import { toast } from 'react-toastify'
@@ -7,6 +7,7 @@ import { MdArrowBack, MdArrowBackIos, MdArrowForwardIos, MdAdd, MdDirectionsCar,
 const JOURS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam']
 const MOIS  = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']
 const MAX_PAR_JOUR = 2
+const EMOJIS = ['👍', '🙏', '✅', '❌', '🔧', '🚗', '📍', '⏰', '📞', '💬', '🙂', '👌']
 
 // Formate date en YYYY-MM-DD local
 const toLocalDate = (d) => {
@@ -45,9 +46,20 @@ const Rendezvous = () => {
   const [messagesModal, setMessagesModal] = useState(null)
   const [messages, setMessages] = useState([])
   const [messageText, setMessageText] = useState('')
+  const autoOpenedNotification = useRef(false)
+  const latestMessageId = useRef(0)
 
   const load = () => {
-    api.get('/client/rendezvous').then(r => setRdvs(r.data)).catch(() => {})
+    api.get('/client/rendezvous').then(r => {
+      setRdvs(r.data)
+      const shouldOpenMessages = sessionStorage.getItem('diagauto-open-rdv-messages') === '1'
+      const unreadRdv = r.data.find(item => Number(item.unread_count) > 0)
+      if (shouldOpenMessages && unreadRdv && !autoOpenedNotification.current) {
+        autoOpenedNotification.current = true
+        sessionStorage.removeItem('diagauto-open-rdv-messages')
+        ouvrirMessages(unreadRdv)
+      }
+    }).catch(() => {})
     api.get('/client/vehicules').then(r => setVehicules(r.data)).catch(() => {})
     // Récupère tous les RDV pour vérifier la limite par jour
     api.get('/client/rendezvous/tous').then(r => setTousRdvs(r.data)).catch(() => {
@@ -180,19 +192,34 @@ const Rendezvous = () => {
     try {
       const { data } = await api.get(`/client/rendezvous/${rdv.id}/messages`)
       setMessages(data)
+      latestMessageId.current = Number(data.at(-1)?.id) || 0
       await api.put('/client/rendezvous/notifications/lire')
+      setRdvs(current => current.map(item => item.id === rdv.id ? { ...item, unread_count: 0 } : item))
     } catch {
       toast.error('Impossible de charger les messages')
     }
   }
+
+  const refreshMessages = async (rdvId) => {
+    const { data } = await api.get(`/client/rendezvous/${rdvId}/messages`)
+    latestMessageId.current = Number(data.at(-1)?.id) || latestMessageId.current
+    setMessages(data)
+  }
+
+  useEffect(() => {
+    if (!messagesModal) return undefined
+    const timer = setInterval(() => {
+      refreshMessages(messagesModal.id).catch(() => {})
+    }, 2000)
+    return () => clearInterval(timer)
+  }, [messagesModal])
 
   const envoyerMessage = async () => {
     if (!messageText.trim() || !messagesModal) return
     try {
       await api.post(`/client/rendezvous/${messagesModal.id}/messages`, { message: messageText })
       setMessageText('')
-      const { data } = await api.get(`/client/rendezvous/${messagesModal.id}/messages`)
-      setMessages(data)
+      await refreshMessages(messagesModal.id)
       toast.success('Message envoye')
     } catch (err) {
       toast.error(err.response?.data?.message || 'Envoi impossible')
@@ -348,6 +375,9 @@ const Rendezvous = () => {
                     <div className="flex gap-2 sm:ml-2 flex-wrap">
                       <button onClick={() => ouvrirMessages(r)} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1">
                         <MdMessage size={15} /> Messages
+                        {Number(r.unread_count) > 0 && (
+                          <span className="bg-red-500 text-white min-w-5 h-5 px-1 rounded-full flex items-center justify-center text-[10px]">{r.unread_count}</span>
+                        )}
                       </button>
                       {['en_attente', 'confirme'].includes(r.statut) && (
                         <>
@@ -503,8 +533,22 @@ const Rendezvous = () => {
               {messages.length === 0 && <p className="text-sm text-gray-400 text-center py-8">Aucun message.</p>}
             </div>
             <div className="mt-3 flex gap-2">
-              <textarea className="input flex-1" rows={2} value={messageText} onChange={e => setMessageText(e.target.value)} placeholder="Ecrire a l'admin..." />
-              <button onClick={envoyerMessage} className="btn-primary px-4 flex items-center gap-2"><MdSend /> Envoyer</button>
+              <div className="flex-1 min-w-0">
+                <div className="flex gap-1 mb-2 overflow-x-auto pb-1">
+                  {EMOJIS.map(emoji => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => setMessageText(text => `${text}${emoji}`)}
+                      className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 text-lg shrink-0"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+                <textarea className="input w-full" rows={2} value={messageText} onChange={e => setMessageText(e.target.value)} placeholder="Ecrire a l'admin..." />
+              </div>
+              <button onClick={envoyerMessage} className="btn-primary px-4 flex items-center gap-2 self-end"><MdSend /> Envoyer</button>
             </div>
             <button onClick={() => setMessagesModal(null)} className="mt-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Fermer</button>
           </div>

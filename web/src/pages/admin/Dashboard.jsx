@@ -35,6 +35,17 @@ const statusLabel = {
   en_attente: 'En attente', confirme: 'Confirmé', annule: 'Annulé', termine: 'Terminé'
 }
 
+const interventionStatusColor = {
+  en_cours: 'bg-blue-100 text-blue-700',
+  termine: 'bg-green-100 text-green-700',
+  suspendu: 'bg-red-100 text-red-700',
+}
+const interventionStatusLabel = {
+  en_cours: 'En cours',
+  termine: 'Termine',
+  suspendu: 'Annule',
+}
+
 const Dashboard = () => {
   const [stats, setStats] = useState(null)
 
@@ -48,6 +59,7 @@ const Dashboard = () => {
         <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
         <p className="text-gray-400 text-sm">Chargement du tableau de bord...</p>
       </div>
+
     </AdminLayout>
   )
 
@@ -195,6 +207,46 @@ const Dashboard = () => {
                     <td className="py-3">
                       <span className={`badge ${statusColor[r.statut] || 'bg-gray-100 text-gray-600'}`}>
                         {statusLabel[r.statut] || r.statut}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="card mt-4">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-gray-700">Dernieres interventions</h2>
+          <a href="/interventions" className="text-sm text-primary hover:underline">Voir tout</a>
+        </div>
+        {!stats.interventions_recentes?.length ? (
+          <div className="text-center py-10 text-gray-300">
+            <MdBuild size={40} className="mx-auto mb-2" />
+            <p className="text-sm">Aucune intervention</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left pb-3 text-gray-500 font-medium">Client</th>
+                  <th className="text-left pb-3 text-gray-500 font-medium">Vehicule</th>
+                  <th className="text-left pb-3 text-gray-500 font-medium">Intervention</th>
+                  <th className="text-left pb-3 text-gray-500 font-medium">Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.interventions_recentes.map(i => (
+                  <tr key={i.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                    <td className="py-3 font-medium text-gray-800">{i.prenom} {i.nom}</td>
+                    <td className="py-3 text-gray-500">{i.marque} {i.modele}<br /><span className="text-xs font-mono text-gray-400">{i.immatriculation}</span></td>
+                    <td className="py-3 text-gray-500 max-w-md truncate">{i.description}</td>
+                    <td className="py-3">
+                      <span className={`badge ${interventionStatusColor[i.statut] || 'bg-gray-100 text-gray-600'}`}>
+                        {interventionStatusLabel[i.statut] || i.statut}
                       </span>
                     </td>
                   </tr>

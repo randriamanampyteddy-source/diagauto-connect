@@ -25,6 +25,7 @@ const AdminSidebar = () => {
   const { logout } = useAuth()
   const navigate = useNavigate()
   const [nouvelles, setNouvelles] = useState(0)
+  const [rdvMessages, setRdvMessages] = useState(0)
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
@@ -32,6 +33,9 @@ const AdminSidebar = () => {
       api.get('/admin/urgences/stats').then(r => {
         const n = Number(r.data.nouvelles) || 0
         setNouvelles(n)
+      }).catch(() => {})
+      api.get('/admin/rendezvous/notifications/stats').then(r => {
+        setRdvMessages(Number(r.data.non_lues) || 0)
       }).catch(() => {})
     }
     load()
@@ -54,11 +58,11 @@ const AdminSidebar = () => {
   }, [])
 
   useEffect(() => {
-    if (!ready || nouvelles <= 0) return
+    if (!ready || nouvelles + rdvMessages <= 0) return
     playUrgenceSound()
     const alarm = setInterval(playUrgenceSound, 2800)
     return () => clearInterval(alarm)
-  }, [ready, nouvelles])
+  }, [ready, nouvelles, rdvMessages])
 
   const handleLogout = () => { logout(); navigate('/login', { replace: true }) }
 
@@ -70,7 +74,9 @@ const AdminSidebar = () => {
       </div>
 
       <nav className="flex-1 flex flex-col gap-1">
-        {links.map(({ to, icon, label, urgent }) => (
+        {links.map(({ to, icon, label, urgent }) => {
+          const badge = urgent ? nouvelles : to === '/rendezvous' ? rdvMessages : 0
+          return (
           <NavLink
             key={to}
             to={to}
@@ -78,13 +84,14 @@ const AdminSidebar = () => {
           >
             {icon}
             <span className="text-sm">{label}</span>
-            {urgent && nouvelles > 0 && (
+            {badge > 0 && (
               <span className="ml-auto bg-red-500 text-white text-xs font-bold min-w-5 h-5 px-1 rounded-full flex items-center justify-center">
-                {nouvelles}
+                {badge}
               </span>
             )}
           </NavLink>
-        ))}
+          )
+        })}
       </nav>
 
       <button onClick={handleLogout} className="sidebar-link mt-2 text-red-300 hover:text-red-100 border-t border-white/10 pt-3">

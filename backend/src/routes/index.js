@@ -33,6 +33,7 @@ router.post('/admin/clients/:id/reset-password', verifyToken, isAdmin, clientCtr
 // ADMIN - Rendez-vous
 router.get('/admin/rendezvous', verifyToken, isAdmin, rdvCtrl.getAllRdv);
 router.post('/admin/rendezvous', verifyToken, isAdmin, rdvCtrl.creerRdvAdmin);
+router.get('/admin/rendezvous/notifications/stats', verifyToken, isAdmin, rdvCtrl.getRdvNotificationsStatsAdmin);
 router.get('/admin/rendezvous/:id/messages', verifyToken, isAdmin, rdvCtrl.getMessagesRdvAdmin);
 router.post('/admin/rendezvous/:id/messages', verifyToken, isAdmin, rdvCtrl.envoyerMessageRdvAdmin);
 router.put('/admin/rendezvous/:id/statut', verifyToken, isAdmin, rdvCtrl.changerStatutRdv);

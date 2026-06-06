@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { toast } from 'react-toastify'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/axios'
 import { demanderPermissionNotificationClient, notifierRendezvousClient } from '../utils/clientNotification'
@@ -20,7 +19,6 @@ const ClientRdvNotification = () => {
         const notification = r.data.notification_version || r.data.derniere_notification || null
         if (next > 0 && notification && notification !== previousNotification.current) {
           notifierRendezvousClient()
-          toast.info('Nouveau message rendez-vous')
         }
         previousNotification.current = notification
         setCount(next)
@@ -36,6 +34,10 @@ const ClientRdvNotification = () => {
   return (
     <Link
       to="/rendezvous"
+      onClick={() => {
+        sessionStorage.setItem('diagauto-open-rdv-messages', '1')
+        setCount(0)
+      }}
       className="fixed top-20 right-4 z-[100] max-w-sm bg-blue-100 border border-blue-400 text-blue-950 rounded-xl shadow-xl p-3 flex items-center gap-3"
     >
       <div className="w-10 h-10 bg-blue-600 text-white rounded-xl flex items-center justify-center shrink-0">

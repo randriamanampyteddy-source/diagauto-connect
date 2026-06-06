@@ -11,9 +11,9 @@ import { getWhatsAppWarning, ouvrirWhatsAppManuel } from '../../utils/whatsapp'
 const statusColors = {
   en_cours: 'bg-blue-100 text-blue-700',
   termine:  'bg-green-100 text-green-700',
-  suspendu: 'bg-yellow-100 text-yellow-700',
+  suspendu: 'bg-red-100 text-red-700',
 }
-const statusLabels = { en_cours: 'En cours', termine: 'Terminé', suspendu: 'Suspendu' }
+const statusLabels = { en_cours: 'En cours', termine: 'Terminé', suspendu: 'Annulé' }
 
 const ligneVide = () => ({ description: '', type: '', quantite: 1, prix_unitaire: 0 })
 
@@ -24,7 +24,7 @@ const Interventions = () => {
   const [search, setSearch]       = useState('')
   const [modal, setModal]         = useState(null)   // 'new' | 'edit'
   const [payModal, setPayModal]   = useState(null)   // intervention sélectionnée
-  const [form, setForm]           = useState({ client_id: '', vehicule_id: '', description: '', technicien: '', date_debut: '' })
+  const [form, setForm]           = useState({ client_id: '', vehicule_id: '', description: '', technicien: '', date_debut: '', dernier_kilometrage: '', numero_vehicule_archive: '' })
   const [repairCategory, setRepairCategory] = useState('')
   const [repairChoice, setRepairChoice] = useState('')
   const [vehicules, setVehicules] = useState([])
@@ -71,7 +71,7 @@ const Interventions = () => {
       await api.post('/admin/interventions', form)
       toast.success('Intervention créée')
       setModal(null)
-      setForm({ client_id: '', vehicule_id: '', description: '', technicien: '', date_debut: '' })
+      setForm({ client_id: '', vehicule_id: '', description: '', technicien: '', date_debut: '', dernier_kilometrage: '', numero_vehicule_archive: '' })
       setRepairCategory('')
       setRepairChoice('')
       load()
@@ -98,7 +98,7 @@ const Interventions = () => {
   }
 
   const ouvrirNouvelleIntervention = () => {
-    setForm({ client_id: '', vehicule_id: '', description: '', technicien: '', date_debut: '' })
+    setForm({ client_id: '', vehicule_id: '', description: '', technicien: '', date_debut: '', dernier_kilometrage: '', numero_vehicule_archive: '' })
     setVehicules([])
     setRepairCategory('')
     setRepairChoice('')
@@ -213,7 +213,7 @@ const Interventions = () => {
         {[
           { key: 'tous',     label: 'Toutes' },
           { key: 'en_cours', label: 'En cours' },
-          { key: 'suspendu', label: 'Suspendues' },
+          { key: 'suspendu', label: 'Annulées' },
           { key: 'termine',  label: 'Terminées' },
         ].map(({ key, label }) => (
           <button
@@ -257,6 +257,12 @@ const Interventions = () => {
                 <td className="px-4 py-3">
                   <p>{i.marque} {i.modele}</p>
                   <p className="text-xs text-gray-400 font-mono">{i.immatriculation}</p>
+                  {(i.dernier_kilometrage || i.numero_vehicule_archive) && (
+                    <p className="text-[11px] text-orange-600 mt-1">
+                      Garage: {i.dernier_kilometrage ? `${Number(i.dernier_kilometrage).toLocaleString()} km` : 'km -'}
+                      {i.numero_vehicule_archive ? ` / ${i.numero_vehicule_archive}` : ''}
+                    </p>
+                  )}
                 </td>
                 <td className="px-4 py-3 max-w-xs">
                   <p className="truncate text-gray-700">{i.description}</p>
@@ -376,6 +382,32 @@ const Interventions = () => {
                   <input type="date" className="input" value={form.date_debut} onChange={e => setForm(f => ({ ...f, date_debut: e.target.value }))} />
                 </div>
               </div>
+              <div className="border border-orange-200 bg-orange-50 rounded-xl p-3">
+                <p className="text-sm font-semibold text-orange-800 mb-2">Archive garage privee</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Dernier kilometrage</label>
+                    <input
+                      type="number"
+                      min="0"
+                      className="input bg-white"
+                      value={form.dernier_kilometrage}
+                      onChange={e => setForm(f => ({ ...f, dernier_kilometrage: e.target.value }))}
+                      placeholder="Ex: 185000"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Numero fiara / archive</label>
+                    <input
+                      className="input bg-white"
+                      value={form.numero_vehicule_archive}
+                      onChange={e => setForm(f => ({ ...f, numero_vehicule_archive: e.target.value }))}
+                      placeholder="Interne garage, chassis, repere..."
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-orange-700 mt-2">Tsy miseho amin'ny facture na amin'ny app client ireo champs ireo.</p>
+              </div>
               <div className="flex gap-3 justify-end mt-2">
                 <button onClick={() => setModal(null)} className="px-4 py-2 border rounded-xl text-gray-600 hover:bg-gray-50">Annuler</button>
                 <button onClick={creer} className="btn-primary">Créer</button>
@@ -395,7 +427,7 @@ const Interventions = () => {
                 <label className="block text-sm font-medium mb-1">Statut</label>
                 <select className="input" value={editForm.statut} onChange={e => setEditForm(f => ({ ...f, statut: e.target.value }))}>
                   <option value="en_cours">En cours</option>
-                  <option value="suspendu">Suspendu</option>
+                  <option value="suspendu">Annulé</option>
                   <option value="termine">Terminé</option>
                 </select>
               </div>

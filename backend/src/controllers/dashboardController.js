@@ -19,6 +19,14 @@ exports.getStats = async (req, res) => {
        FROM rendezvous r JOIN clients c ON r.client_id = c.id JOIN vehicules v ON r.vehicule_id = v.id
        ORDER BY r.created_at DESC LIMIT 5`
     );
+    const [interventions_recentes] = await db.query(
+      `SELECT i.id, i.description, i.technicien, i.date_debut, i.date_fin, i.statut,
+              c.nom, c.prenom, v.marque, v.modele, v.immatriculation
+       FROM interventions i
+       JOIN clients c ON i.client_id = c.id
+       JOIN vehicules v ON i.vehicule_id = v.id
+       ORDER BY i.created_at DESC LIMIT 5`
+    );
 
     res.json({
       total_clients,
@@ -28,7 +36,8 @@ exports.getStats = async (req, res) => {
       interventions_en_cours,
       factures_non_payees,
       chiffre_affaires_mois: chiffre_affaires,
-      rdv_recents
+      rdv_recents,
+      interventions_recentes
     });
   } catch (err) {
     res.status(500).json({ message: 'Erreur serveur', error: err.message });

@@ -18,6 +18,16 @@ const genNumero = (prefix) => {
   return `${prefix}-${annee}${mois}-${rand}`;
 };
 
+const getAccesFactureClientComplet = (id) => {
+  const clientUrl = String(process.env.APP_CLIENT_URL || '').trim().replace(/\/$/, '');
+  const urlUtilisable = clientUrl
+    && /^https?:\/\//i.test(clientUrl)
+    && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(clientUrl);
+  return urlUtilisable
+    ? `Lien facture numerique : ${clientUrl}/documents/facture/${id}/imprimer`
+    : 'Facture numerique jointe dans l application client DiagAuto Mada : ouvrez Documents > Factures > Voir / Imprimer.';
+};
+
 // ===== DEVIS =====
 exports.creerDevis = async (req, res) => {
   try {
@@ -250,7 +260,7 @@ exports.envoyerFacture = async (req, res) => {
     const whatsapp = await envoyerWhatsAppClient({
       clientId: f.client_id,
       type: 'facture_envoi',
-      message: `DiagAuto Mada\nFacture disponible.\nFacture : ${f.numero_facture}\nVehicule : ${f.marque} ${f.modele} (${f.immatriculation})\nTotal : ${Number(f.montant_ttc).toLocaleString('fr-FR')} Ar\nDeja paye : ${Number(f.montant_paye || 0).toLocaleString('fr-FR')} Ar\nReste : ${Math.max(0, reste).toLocaleString('fr-FR')} Ar\nStatut : ${String(f.statut || '').replaceAll('_', ' ')}\n${getAccesFactureClient(id)}`,
+      message: `DiagAuto Mada\nFacture disponible.\nFacture : ${f.numero_facture}\nVehicule : ${f.marque} ${f.modele} (${f.immatriculation})\nTotal : ${Number(f.montant_ttc).toLocaleString('fr-FR')} Ar\nDeja paye : ${Number(f.montant_paye || 0).toLocaleString('fr-FR')} Ar\nReste : ${Math.max(0, reste).toLocaleString('fr-FR')} Ar\nStatut : ${String(f.statut || '').replaceAll('_', ' ')}\n${getAccesFactureClientComplet(id)}`,
     });
     res.json({ message: 'Facture prete a envoyer', whatsapp });
   } catch (err) {
@@ -274,7 +284,7 @@ exports.enregistrerPaiement = async (req, res) => {
     const whatsapp = await envoyerWhatsAppClient({
       clientId: f.client_id,
       type: 'facture_paiement',
-      message: `DiagAuto Mada\nPaiement facture validé.\nFacture : ${f.numero_facture}\nVéhicule : ${f.marque} ${f.modele} (${f.immatriculation})\nMontant payé : ${Number(montant_paye).toLocaleString('fr-FR')} Ar\nStatut : ${statut.replaceAll('_', ' ')}\n${getAccesFactureClient(id)}`,
+      message: `DiagAuto Mada\nPaiement facture valide.\nFacture : ${f.numero_facture}\nVehicule : ${f.marque} ${f.modele} (${f.immatriculation})\nMontant paye : ${Number(montant_paye).toLocaleString('fr-FR')} Ar\nStatut : ${statut.replaceAll('_', ' ')}\n${getAccesFactureClientComplet(id)}`,
     });
     res.json({ message: 'Paiement enregistré', statut, whatsapp });
   } catch (err) {

@@ -206,8 +206,16 @@ exports.creerRdv = async (req, res) => {
 
 exports.getMesRdv = async (req, res) => {
   try {
+    await ensureMessagesTable();
     const [rows] = await db.query(
-      `SELECT r.*, v.marque, v.modele, v.immatriculation
+      `SELECT r.*, v.marque, v.modele, v.immatriculation,
+              (
+                SELECT COUNT(*) FROM rendezvous_messages rm
+                WHERE rm.rendezvous_id = r.id
+                  AND rm.client_id = r.client_id
+                  AND rm.expediteur <> 'client'
+                  AND rm.lu_client = FALSE
+              ) AS unread_count
        FROM rendezvous r JOIN vehicules v ON r.vehicule_id = v.id
        WHERE r.client_id = ? ORDER BY r.date_rdv DESC`,
       [req.user.id]
@@ -220,8 +228,15 @@ exports.getMesRdv = async (req, res) => {
 
 exports.getAllRdv = async (req, res) => {
   try {
+    await ensureMessagesTable();
     const [rows] = await db.query(
-      `SELECT r.*, c.nom, c.prenom, c.id_client, v.marque, v.modele, v.immatriculation
+      `SELECT r.*, c.nom, c.prenom, c.id_client, v.marque, v.modele, v.immatriculation,
+              (
+                SELECT COUNT(*) FROM rendezvous_messages rm
+                WHERE rm.rendezvous_id = r.id
+                  AND rm.expediteur = 'client'
+                  AND rm.lu_admin = FALSE
+              ) AS unread_count
        FROM rendezvous r
        JOIN clients c ON r.client_id = c.id
        JOIN vehicules v ON r.vehicule_id = v.id
@@ -353,6 +368,10 @@ exports.getMessagesRdvClient = async (req, res) => {
     const { id } = req.params;
     const [[rdv]] = await db.query('SELECT id FROM rendezvous WHERE id = ? AND client_id = ?', [id, req.user.id]);
     if (!rdv) return res.status(404).json({ message: 'Rendez-vous introuvable' });
+    await db.query(
+      "UPDATE rendezvous_messages SET lu_client = TRUE WHERE rendezvous_id = ? AND client_id = ? AND expediteur <> 'client'",
+      [id, req.user.id]
+    );
     const [rows] = await db.query(
       'SELECT * FROM rendezvous_messages WHERE rendezvous_id = ? AND client_id = ? ORDER BY created_at ASC, id ASC',
       [id, req.user.id]
@@ -435,6 +454,24 @@ exports.lireMesRdvNotifications = async (req, res) => {
       [req.user.id]
     );
     res.json({ message: 'Notifications lues' });
+  } catch (err) {
+    res.status(500).json({ message: 'Erreur serveur', error: err.message });
+  }
+};
+
+exports.getRdvNotificationsStatsAdmin = async (req, res) => {
+  try {
+    await ensureMessagesTable();
+    const [[row]] = await db.query(
+      `SELECT COUNT(*) AS non_lues, MAX(id) AS notification_version, MAX(created_at) AS derniere_notification
+       FROM rendezvous_messages
+       WHERE expediteur = 'client' AND lu_admin = FALSE`
+    );
+    res.json({
+      non_lues: Number(row.non_lues) || 0,
+      notification_version: Number(row.notification_version) || 0,
+      derniere_notification: row.derniere_notification || null,
+    });
   } catch (err) {
     res.status(500).json({ message: 'Erreur serveur', error: err.message });
   }

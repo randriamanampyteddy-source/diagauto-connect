@@ -64,8 +64,8 @@ const Factures = () => {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(null)
 
-  const load = async () => {
-    setLoading(true)
+  const load = async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
       const [factures, devis, proformas] = await Promise.all([
         api.get(typeConfig.facture.endpoint),
@@ -78,13 +78,17 @@ const Factures = () => {
         proforma: proformas.data,
       })
     } catch {
-      toast.error('Impossible de charger les documents')
+      if (!silent) toast.error('Impossible de charger les documents')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    const timer = setInterval(() => load(true), 4000)
+    return () => clearInterval(timer)
+  }, [])
 
   const items = useMemo(() => docs[active] || [], [docs, active])
 
