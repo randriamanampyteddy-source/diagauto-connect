@@ -1,0 +1,31 @@
+DIAGAUTO MADA - VERSION INSTALLABLE 1.2
+
+APK MOBILE
+- DiagAuto-Admin-v1.2.apk
+- DiagAuto-Client-v1.2.apk
+- Interface mobile application avec navigation inferieure.
+- Les boutons Enregistrer/Envoyer restent visibles pendant la saisie.
+- L'ecran se redimensionne automatiquement lorsque le clavier est ouvert.
+- Android minimum : 5.1
+- Autoriser l'installation depuis une source inconnue sur le telephone.
+- Le telephone et cet ordinateur doivent etre connectes au meme reseau.
+- Le backend doit rester demarre sur cet ordinateur.
+
+CONNEXION ADMIN
+- Email : admin@diagauto.mg
+- Mot de passe : admin123
+
+ADMIN NAVIGATEUR INSTALLABLE
+- Le contenu de DiagAuto-Admin-PWA-v1.1.zip est la version PWA a deployer.
+- Une PWA doit etre servie en HTTPS (ou sur localhost) pour afficher l'option Installer.
+
+ADMIN WINDOWS
+- DiagAuto-Admin-Setup-1.1.0-x64.exe : installateur Windows avec raccourcis.
+- DiagAuto-Admin-Portable-1.1.0-x64.exe : version portable, utilisable sans installation.
+- L'application lance automatiquement le backend local s'il n'est pas deja demarre.
+- MySQL et la base diagauto_connect doivent etre disponibles sur cet ordinateur.
+- Windows peut afficher un avertissement "Editeur inconnu" car aucun certificat commercial de signature n'est configure.
+
+CONFIGURATION ACTUELLE
+- API mobile : http://192.168.1.142:5000/api
+- Pour une utilisation hors du reseau local, remplacer cette adresse par le domaine HTTPS public du backend puis reconstruire les APK.

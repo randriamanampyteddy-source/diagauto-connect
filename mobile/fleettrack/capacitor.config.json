@@ -1,0 +1,11 @@
+{
+  "appId": "mg.diagauto.fleettrack",
+  "appName": "FleetTrack Pro",
+  "webDir": "../../web/dist-fleettrack",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

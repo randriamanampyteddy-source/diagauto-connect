@@ -1,0 +1,1594 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FleetTrack Pro — Administration</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<style>
+  :root {
+    --bg:#0d1117; --card:#161b22; --card2:#1c2333; --border:#30363d;
+    --primary:#4493f8; --pri-d:#1f6feb; --text:#e6edf3; --muted:#7d8590;
+    --success:#3fb950; --warning:#d29922; --danger:#f85149; --orange:#e3a23a; --info:#a371f7;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+
+  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px;background:radial-gradient(ellipse at 60% 20%,rgba(68,147,248,.08) 0%,transparent 60%);}
+  .login-card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:40px 32px;width:100%;max-width:400px;box-shadow:0 30px 80px rgba(0,0,0,.6);animation:fadeUp .35s ease;}
+  @keyframes fadeUp{from{transform:translateY(24px);opacity:0}to{transform:translateY(0);opacity:1}}
+  .login-logo{width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,var(--primary),var(--pri-d));display:flex;align-items:center;justify-content:center;font-size:2rem;margin:0 auto 18px;}
+  .login-title{font-size:1.4rem;font-weight:700;text-align:center;margin-bottom:4px;}
+  .login-sub{font-size:.8rem;color:var(--muted);text-align:center;margin-bottom:28px;}
+
+  .app{display:none;flex-direction:column;min-height:100vh;}
+  .app.visible{display:flex;}
+  header{background:var(--card);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
+  .hdr-left{display:flex;align-items:center;gap:12px;}
+  .hdr-icon{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,var(--primary),var(--pri-d));display:flex;align-items:center;justify-content:center;font-size:1.1rem;}
+  .hdr-title{font-size:1rem;font-weight:700;}
+  .hdr-sub{font-size:.7rem;color:var(--muted);}
+  .hdr-badge{background:rgba(248,81,73,.15);color:var(--danger);border:1px solid rgba(248,81,73,.3);border-radius:6px;padding:3px 10px;font-size:.72rem;font-weight:700;}
+  .btn-logout{background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;padding:6px 12px;font-size:.78rem;transition:all .2s;}
+  .btn-logout:hover{color:var(--danger);border-color:rgba(248,81,73,.4);}
+
+  nav{display:flex;background:var(--card);border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none;}
+  nav::-webkit-scrollbar{display:none;}
+  nav button{flex:1;min-width:80px;padding:12px 8px;border:none;background:none;cursor:pointer;font-size:.78rem;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;transition:all .2s;white-space:nowrap;}
+  nav button.active{color:var(--primary);border-bottom-color:var(--primary);}
+  nav button:hover:not(.active){color:var(--text);background:rgba(255,255,255,.04);}
+
+  .page{display:none;padding:20px 16px;max-width:1000px;margin:0 auto;}
+  .page.active{display:block;}
+
+  .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+  @media(max-width:900px){.stats-grid{grid-template-columns:repeat(2,1fr);}}
+  .stat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;display:flex;align-items:center;gap:12px;transition:border-color .2s;}
+  .stat-card:hover{border-color:var(--primary);}
+  .sico{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;}
+  .sico.blue{background:rgba(68,147,248,.15);}  .sico.green{background:rgba(63,185,80,.15);}
+  .sico.orange{background:rgba(227,162,58,.15);} .sico.red{background:rgba(248,81,73,.15);}
+  .sico.purple{background:rgba(163,113,247,.15);}
+  .sval{font-size:1.35rem;font-weight:700;line-height:1.2;}
+  .slbl{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-top:2px;}
+
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:16px;}
+  .card-title{font-size:.82rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:16px;display:flex;align-items:center;gap:8px;color:var(--text);}
+  .card-title::before{content:'';display:inline-block;width:3px;height:16px;background:var(--primary);border-radius:2px;}
+
+  .table-wrap{overflow-x:auto;border-radius:8px;border:1px solid var(--border);}
+  table{width:100%;border-collapse:collapse;font-size:.8rem;}
+  thead{background:var(--card2);}
+  th{padding:11px 12px;text-align:left;font-weight:600;font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;border-bottom:1px solid var(--border);}
+  td{padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap;color:var(--text);}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover td{background:rgba(255,255,255,.025);}
+
+  .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:.68rem;font-weight:700;}
+  .bg{background:rgba(63,185,80,.15);color:#3fb950;border:1px solid rgba(63,185,80,.3);}
+  .br{background:rgba(248,81,73,.15);color:#f85149;border:1px solid rgba(248,81,73,.3);}
+  .bo{background:rgba(227,162,58,.15);color:#e3a23a;border:1px solid rgba(227,162,58,.3);}
+  .bb{background:rgba(68,147,248,.15);color:#4493f8;border:1px solid rgba(68,147,248,.3);}
+  .bp{background:rgba(163,113,247,.15);color:#a371f7;border:1px solid rgba(163,113,247,.3);}
+  .bm{background:rgba(125,133,144,.1);color:var(--muted);border:1px solid rgba(125,133,144,.2);}
+
+  label{font-size:.74rem;font-weight:500;color:var(--muted);display:block;margin-bottom:5px;}
+  input,select,textarea{width:100%;padding:9px 11px;background:var(--card2);border:1px solid var(--border);border-radius:8px;font-size:.88rem;color:var(--text);transition:border-color .2s,box-shadow .2s;}
+  input::placeholder{color:#3d444d;}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(68,147,248,.12);}
+  select option{background:#1c2333;color:var(--text);}
+  .form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;}
+  .form-row.single{grid-template-columns:1fr;}
+  .form-row.triple{grid-template-columns:1fr 1fr 1fr;}
+
+  .btn{padding:9px 18px;border:none;border-radius:8px;cursor:pointer;font-size:.85rem;font-weight:600;transition:all .2s;}
+  .btn-primary{background:var(--primary);color:#fff;}
+  .btn-primary:hover{background:var(--pri-d);}
+  .btn-success{background:#1a7f37;color:#fff;border:1px solid #2ea043;}
+  .btn-success:hover{background:#2ea043;}
+  .btn-danger{background:rgba(248,81,73,.12);color:var(--danger);border:1px solid rgba(248,81,73,.35);}
+  .btn-danger:hover{background:rgba(248,81,73,.25);}
+  .btn-muted{background:rgba(255,255,255,.05);color:var(--muted);border:1px solid var(--border);}
+  .btn-muted:hover{color:var(--text);border-color:var(--primary);}
+  .btn-warn{background:rgba(227,162,58,.12);color:var(--orange);border:1px solid rgba(227,162,58,.35);}
+  .btn-warn:hover{background:rgba(227,162,58,.25);}
+  .btn-sm{padding:5px 10px;font-size:.72rem;}
+  .btn-full{width:100%;margin-top:8px;}
+
+  .modal-wrap{position:fixed;inset:0;background:rgba(13,17,23,.9);z-index:200;display:none;align-items:center;justify-content:center;padding:16px;}
+  .modal-wrap.open{display:flex;}
+  .modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:26px;width:100%;max-width:540px;box-shadow:0 30px 80px rgba(0,0,0,.6);animation:fadeUp .25s ease;max-height:90vh;overflow-y:auto;}
+  .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;}
+  .modal-title{font-size:1rem;font-weight:700;}
+  .modal-close{background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;width:34px;height:34px;font-size:1rem;}
+  .modal-close:hover{color:var(--text);border-color:var(--primary);}
+
+  .key-box{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:14px;margin:10px 0;}
+  .key-lbl{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;}
+  .key-val{font-family:monospace;font-size:1.3rem;font-weight:700;color:var(--primary);letter-spacing:2px;margin-bottom:10px;}
+
+  .sub-type-toggle{display:flex;gap:8px;margin-top:4px;}
+  .sub-btn{flex:1;padding:10px;border:1.5px solid var(--border);border-radius:8px;background:var(--card2);color:var(--muted);cursor:pointer;font-size:.85rem;font-weight:600;text-align:center;transition:all .2s;}
+  .sub-btn.active-abo{border-color:var(--orange);background:rgba(227,162,58,.1);color:var(--orange);}
+  .sub-btn.active-life{border-color:var(--success);background:rgba(63,185,80,.1);color:var(--success);}
+  .sub-btn.active-trial{border-color:var(--warning);background:rgba(210,153,34,.12);color:var(--warning);}
+
+  .search-bar{display:flex;gap:8px;margin-bottom:14px;}
+  .search-bar input{flex:1;}
+  .empty{text-align:center;padding:36px;color:var(--muted);font-size:.88rem;}
+  .section-title{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:600;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+  .config-row{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+  .config-row label{min-width:160px;font-weight:600;color:var(--text);font-size:.82rem;}
+  .config-row input{max-width:200px;}
+  .expire-warn{color:var(--warning);}
+  .expire-ok{color:var(--success);}
+  .expire-dead{color:var(--danger);}
+
+  .nav-badge{display:inline-flex;align-items:center;justify-content:center;background:var(--danger);color:#fff;border-radius:50%;width:17px;height:17px;font-size:.65rem;font-weight:700;margin-left:4px;animation:pulse 1.5s infinite;}
+  @keyframes pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.2);}}
+  .demande-card{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;transition:border-color .2s;}
+  .demande-card:hover{border-color:var(--primary);}
+  .demande-card.pending{border-left:3px solid var(--warning);}
+  .demande-card.validated{border-left:3px solid var(--success);opacity:.7;}
+  .demande-card.rejected{border-left:3px solid var(--danger);opacity:.6;}
+  .firebase-status{display:flex;align-items:center;gap:6px;font-size:.72rem;padding:6px 12px;border-radius:8px;margin-bottom:14px;}
+  .firebase-ok{background:rgba(63,185,80,.1);border:1px solid rgba(63,185,80,.25);color:var(--success);}
+  .firebase-err{background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.25);color:var(--danger);}
+  .firebase-cfg{background:rgba(227,162,58,.1);border:1px solid rgba(227,162,58,.25);color:var(--orange);}
+  @media(max-width:640px){.stats-grid{grid-template-columns:1fr 1fr;}.form-row.triple{grid-template-columns:1fr 1fr;}}
+
+  /* ===== MOBILE BOTTOM NAV ===== */
+  .bnav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:500;background:var(--card);border-top:1px solid var(--border);height:62px;align-items:stretch;safe-area-inset-bottom:env(safe-area-inset-bottom);}
+  .bnav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border:none;background:none;color:var(--muted);cursor:pointer;gap:3px;padding:6px 4px;transition:color .2s;position:relative;-webkit-tap-highlight-color:transparent;}
+  .bnav-btn .bi{font-size:1.4rem;line-height:1;}
+  .bnav-btn .bl{font-size:.58rem;font-weight:600;line-height:1;letter-spacing:.2px;}
+  .bnav-btn.active{color:var(--primary);}
+  .bnav-btn.active .bi{transform:scale(1.1);}
+  .nb-badge{position:absolute;top:5px;right:calc(50% - 20px);background:var(--danger);color:#fff;border-radius:10px;font-size:.55rem;font-weight:700;padding:1px 5px;min-width:16px;text-align:center;line-height:1.4;}
+  .mob-back{display:none;align-items:center;justify-content:center;background:none;border:none;color:var(--text);font-size:1.5rem;padding:4px 10px;cursor:pointer;border-radius:8px;-webkit-tap-highlight-color:transparent;min-width:44px;min-height:44px;}
+
+  @media(max-width:768px){
+    nav{display:none!important;}
+    .bnav{display:flex;}
+    .mob-back{display:flex;}
+    body{padding-bottom:62px;}
+    .page{padding:12px 10px;}
+    .stats-grid{grid-template-columns:repeat(2,1fr)!important;}
+    header{padding:10px 12px;}
+    .hdr-title{font-size:.88rem;}
+    .hdr-sub{display:none;}
+    .hdr-badge{display:none;}
+    .btn-logout{padding:5px 10px;font-size:.72rem;}
+    .modal{padding:16px;border-radius:16px 16px 0 0;position:fixed;bottom:0;left:0;right:0;max-width:100%;width:100%;margin:0;max-height:92vh;}
+    .modal-wrap{align-items:flex-end;padding:0;}
+    .form-row,.config-row{flex-direction:column!important;align-items:flex-start!important;}
+    .form-row>*,.config-row input,.config-row select{width:100%!important;max-width:100%!important;}
+    .config-row label{min-width:unset!important;}
+    .sub-type-toggle{flex-direction:column;}
+    .sub-btn{padding:12px;}
+    input,select,textarea{font-size:16px!important;min-height:44px;}
+    .btn{min-height:44px;font-size:.85rem;}
+    .btn-sm{min-height:36px;}
+    .card{padding:14px 12px;}
+    .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+    table{min-width:520px;}
+    .demande-card{padding:12px;}
+    .search-bar{flex-direction:column;}
+    .search-bar input{width:100%;}
+    .key-val{font-size:1.05rem;letter-spacing:1px;}
+    .login-card{padding:28px 20px;}
+  }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-wrap" class="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">🛡️</div>
+    <div class="login-title">FleetTrack Pro</div>
+    <div class="login-sub">Panneau d'administration — Accès restreint</div>
+    <div>
+      <label>Mot de passe administrateur</label>
+      <input type="password" id="login-pwd" placeholder="••••••••"
+        onkeydown="if(event.key==='Enter')doLogin()" style="margin-bottom:10px;">
+      <div style="color:var(--danger);font-size:.78rem;min-height:16px;margin-bottom:8px;" id="login-err"></div>
+      <button class="btn btn-primary btn-full" onclick="doLogin()">Se connecter →</button>
+    </div>
+    <p style="font-size:.72rem;color:var(--muted);text-align:center;margin-top:16px;">Accès réservé à l'administrateur système.</p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" class="app">
+  <header>
+    <button class="mob-back" id="mob-back-btn" onclick="mobileBack()" style="display:none;">&#8592;</button>
+    <div class="hdr-left">
+      <div class="hdr-icon">🛡️</div>
+      <div>
+        <div class="hdr-title">FleetTrack Admin</div>
+        <div class="hdr-sub">Gestion des licences &amp; abonnements</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <span class="hdr-badge">ADMIN</span>
+      <button class="btn-logout" onclick="doLogout()">Déco.</button>
+    </div>
+  </header>
+
+  <nav>
+    <button class="active" onclick="showPage('clients',this)">👥 Clients</button>
+    <button onclick="showPage('demandes',this)" id="nav-demandes">🔔 Demandes<span id="demandes-badge" class="nav-badge" style="display:none;">0</span></button>
+    <button onclick="showPage('stats',this)">📊 Statistiques</button>
+    <button onclick="showPage('settings',this)">⚙️ Paramètres</button>
+  </nav>
+
+  <!-- BOTTOM NAV (mobile) -->
+  <div class="bnav" id="bnav">
+    <button class="bnav-btn active" id="bnav-clients" onclick="showPage('clients',null)">
+      <span class="bi">👥</span><span class="bl">Clients</span>
+    </button>
+    <button class="bnav-btn" id="bnav-demandes" onclick="showPage('demandes',null)">
+      <span class="bi">🔔</span><span class="bl">Demandes</span>
+      <span class="nb-badge" id="bnav-demandes-badge" style="display:none;">0</span>
+    </button>
+    <button class="bnav-btn" id="bnav-stats" onclick="showPage('stats',null)">
+      <span class="bi">📊</span><span class="bl">Stats</span>
+    </button>
+    <button class="bnav-btn" id="bnav-settings" onclick="showPage('settings',null)">
+      <span class="bi">⚙️</span><span class="bl">Config</span>
+    </button>
+  </div>
+
+  <!-- CLIENTS PAGE -->
+  <div id="page-clients" class="page active">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+      <div>
+        <div style="font-size:1rem;font-weight:700;">Gestion des clients</div>
+        <div style="font-size:.75rem;color:var(--muted);">Licences, abonnements et accès aux appareils</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-muted" onclick="exportCSV()" title="Exporter la liste en CSV">⬇ Export CSV</button>
+        <button class="btn btn-primary" onclick="openAddModal()">+ Nouveau client</button>
+      </div>
+    </div>
+
+    <div class="search-bar">
+      <input type="text" id="search-q" placeholder="🔍 Rechercher un client..." oninput="renderClients()">
+      <select id="filter-type" style="width:160px;" onchange="renderClients()">
+        <option value="">Tous les types</option>
+        <option value="ABONNE">Abonnement</option>
+        <option value="LIFE">Définitif</option>
+        <option value="24H">Essai 24h</option>
+      </select>
+      <select id="filter-status" style="width:160px;" onchange="renderClients()">
+        <option value="">Tous les statuts</option>
+        <option value="active">Actifs</option>
+        <option value="suspended">Suspendus</option>
+        <option value="expired">Expirés</option>
+      </select>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div class="table-wrap" style="border:none;border-radius:0;">
+        <table>
+          <thead>
+            <tr>
+              <th>Nom / Entreprise</th>
+              <th>Type</th>
+              <th>Expiration</th>
+              <th>Reste</th>
+              <th>Appareil 1</th>
+              <th>Appareil 2</th>
+              <th>Statut</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="clients-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEMANDES PAGE -->
+  <div id="page-demandes" class="page">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+      <div>
+        <div style="font-size:1rem;font-weight:700;">Traitement des demandes</div>
+        <div style="font-size:.75rem;color:var(--muted);">Validez les demandes reçues par WhatsApp ou via Firebase</div>
+      </div>
+      <button class="btn btn-muted btn-sm" onclick="loadDemandes()">🔄 Firebase</button>
+    </div>
+
+    <!-- TRAITEMENT MANUEL (WhatsApp) — PRIMARY -->
+    <div class="card" style="border-color:rgba(63,185,80,.3);margin-bottom:16px;">
+      <div class="card-title" style="margin-bottom:14px;">📱 Traiter une demande reçue (WhatsApp / SMS)</div>
+      <div class="form-row">
+        <div>
+          <label>Nom complet du client *</label>
+          <input type="text" id="m-nom" placeholder="Nom exact tel qu'il s'est inscrit">
+        </div>
+        <div>
+          <label>Entreprise</label>
+          <input type="text" id="m-entreprise" placeholder="Facultatif">
+        </div>
+      </div>
+      <div class="form-row">
+        <div>
+          <label>Type de licence *</label>
+          <div class="sub-type-toggle">
+            <button type="button" class="sub-btn" id="m-btn-abo"  onclick="mSelectType('ABONNE')">📅 Abonnement</button>
+            <button type="button" class="sub-btn" id="m-btn-life" onclick="mSelectType('LIFE')">♾️ Définitif</button>
+            <button type="button" class="sub-btn" id="m-btn-24h"  onclick="mSelectType('24H')">⏱️ 24h Essai</button>
+          </div>
+          <input type="hidden" id="m-type" value="">
+        </div>
+        <div id="m-dur-section" style="display:none;">
+          <label>Durée abonnement</label>
+          <select id="m-duration">
+            <option value="1">1 mois</option>
+            <option value="3" selected>3 mois</option>
+            <option value="6">6 mois</option>
+            <option value="12">1 an</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-success" style="width:100%;margin-top:4px;" onclick="traiterManuel()">
+        ⚡ Générer les IDs d'activation
+      </button>
+
+      <div id="manuel-result" style="display:none;margin-top:12px;">
+        <div class="section-title">IDs générés — À envoyer au client</div>
+        <div style="background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:14px;">
+          <div style="font-size:.72rem;color:var(--muted);margin-bottom:4px;">📱 Appareil 1 :</div>
+          <div style="font-family:monospace;font-size:1.1rem;font-weight:700;color:var(--primary);margin-bottom:8px;" id="m-key1"></div>
+          <div style="font-size:.72rem;color:var(--muted);margin-bottom:4px;">📱 Appareil 2 :</div>
+          <div style="font-family:monospace;font-size:1.1rem;font-weight:700;color:var(--primary);margin-bottom:12px;" id="m-key2"></div>
+          <div id="m-wa-msg-box" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;font-family:monospace;font-size:.78rem;white-space:pre-wrap;margin-bottom:10px;"></div>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-muted btn-sm" style="flex:1;" onclick="copyMResult()">📋 Copier</button>
+            <button class="btn btn-success btn-sm" style="flex:2;" onclick="sendMWhatsApp()">📱 Envoyer via WhatsApp</button>
+          </div>
+          <div id="m-copy-confirm" style="font-size:.72rem;color:var(--success);text-align:center;min-height:14px;margin-top:4px;"></div>
+        </div>
+        <div style="margin-top:10px;padding:10px;background:rgba(68,147,248,.08);border:1px solid rgba(68,147,248,.2);border-radius:8px;font-size:.78rem;">
+          ℹ️ Le client saisit l'ID Appareil 1 sur son premier appareil, et l'ID Appareil 2 sur le second.
+        </div>
+      </div>
+    </div>
+
+    <!-- NOTIFICATIONS NTFY -->
+    <div class="card" style="margin-bottom:12px;">
+      <div class="card-title" style="margin-bottom:12px;">
+        🔔 Notifications reçues (ntfy.sh)
+        <button class="btn btn-muted btn-sm" style="margin-left:auto;" onclick="renderNtfyPanel()">🔄 Actualiser</button>
+      </div>
+      <div id="ntfy-panel"><div class="empty" style="padding:12px;">Cliquez sur Actualiser pour charger.</div></div>
+    </div>
+
+    <!-- FIREBASE (optionnel) -->
+    <details style="margin-bottom:12px;">
+      <summary style="cursor:pointer;font-size:.82rem;color:var(--muted);padding:4px 0;">
+        🔥 Demandes Firebase en temps réel (optionnel — nécessite configuration)
+      </summary>
+      <div style="padding-top:10px;">
+        <div id="firebase-status-bar"></div>
+        <div id="demandes-filter" style="display:flex;gap:8px;margin-bottom:14px;margin-top:8px;">
+          <select id="df-status" onchange="renderDemandes()" style="width:180px;">
+            <option value="pending">⏳ En attente</option>
+            <option value="">Toutes les demandes</option>
+            <option value="validated">✅ Validées</option>
+            <option value="rejected">❌ Rejetées</option>
+          </select>
+        </div>
+        <div id="demandes-list"><div class="empty">Cliquez sur "🔄 Firebase" pour charger.</div></div>
+      </div>
+    </details>
+  </div>
+
+  <!-- STATS PAGE -->
+  <div id="page-stats" class="page">
+    <div class="stats-grid" id="stats-grid"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div class="card">
+        <div class="card-title">Abonnements arrivant à échéance</div>
+        <div id="expiring-list"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Clients récents</div>
+        <div id="recent-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS PAGE -->
+  <div id="page-settings" class="page">
+    <div class="card">
+      <div class="card-title">🔑 Changer le mot de passe administrateur</div>
+      <div class="config-row">
+        <label>Mot de passe actuel</label>
+        <input type="password" id="s-pwd-cur" placeholder="Mot de passe actuel">
+      </div>
+      <div class="config-row">
+        <label>Nouveau mot de passe</label>
+        <input type="password" id="s-pwd-new" placeholder="Nouveau mot de passe">
+      </div>
+      <div class="config-row">
+        <label>Confirmer</label>
+        <input type="password" id="s-pwd-conf" placeholder="Répéter le mot de passe">
+      </div>
+      <div id="s-pwd-msg" style="font-size:.78rem;min-height:16px;margin-bottom:10px;"></div>
+      <button class="btn btn-success" onclick="changePwd()">Enregistrer le nouveau mot de passe</button>
+    </div>
+    <div class="card" style="border-color:rgba(63,185,80,.3);">
+      <div class="card-title">🔔 Configuration ntfy.sh (notifications push)</div>
+      <p style="font-size:.82rem;color:var(--muted);margin-bottom:12px;">
+        ntfy.sh envoie des notifications sur votre téléphone quand un client se connecte ou fait une demande.
+        <strong style="color:var(--text);">Gratuit, aucun compte requis.</strong>
+      </p>
+      <ol style="font-size:.8rem;color:var(--text);padding-left:16px;line-height:2.2;margin-bottom:14px;">
+        <li>Installez <strong>ntfy</strong> sur votre téléphone (Android / iOS) — <em>ntfy.sh</em></li>
+        <li>Choisissez un nom de topic unique ci-dessous (ex: <code style="background:var(--card2);padding:1px 5px;border-radius:4px;">fleettrack-rakoto-2024</code>)</li>
+        <li>Dans ntfy app → <strong>Ajouter un abonnement</strong> → entrez ce même topic</li>
+        <li>Copiez ce topic dans les apps clients (tab Config de chaque app client)</li>
+      </ol>
+      <div class="config-row">
+        <label>Topic ntfy *</label>
+        <input type="text" id="s-ntfy-topic" placeholder="ex: fleettrack-rakoto-2024"
+          style="max-width:260px;font-family:monospace;" oninput="saveNtfyTopic(this.value)">
+        <button class="btn btn-success btn-sm" onclick="testNtfy()">🧪 Tester</button>
+      </div>
+      <div id="ntfy-test-result" style="font-size:.78rem;min-height:14px;"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📱 Numéro WhatsApp du client à contacter</div>
+      <p style="font-size:.82rem;color:var(--muted);margin-bottom:12px;">
+        Entrez le numéro du client avant de cliquer "Envoyer via WhatsApp" dans l'onglet Demandes.
+      </p>
+      <div class="config-row">
+        <label>Numéro WhatsApp client</label>
+        <input type="tel" id="s-client-phone" placeholder="ex : +261340000000" style="max-width:220px;"
+          oninput="DB.setVal('admin_client_phone',this.value)">
+      </div>
+    </div>
+
+    <div class="card" style="border-color:rgba(68,147,248,.3);">
+      <div class="card-title">🔥 Configuration Firebase (notifications temps réel)</div>
+      <p style="font-size:.82rem;color:var(--muted);margin-bottom:12px;">
+        Entrez votre config Firebase ci-dessous. Elle est sauvegardée localement — inutile de modifier le code.
+      </p>
+      <ol style="font-size:.8rem;color:var(--muted);padding-left:18px;line-height:2;margin-bottom:14px;">
+        <li>Allez sur <strong style="color:var(--text);">console.firebase.google.com</strong> → Créer un projet</li>
+        <li>Realtime Database → Créer une base de données (mode test)</li>
+        <li>Règles → <code style="background:var(--card2);padding:2px 6px;border-radius:4px;">{ "rules": { ".read": true, ".write": true } }</code></li>
+        <li>Paramètres du projet → Vos applications → SDK → Copiez les valeurs ci-dessous</li>
+      </ol>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div><label>API Key *</label><input type="text" id="fb-apiKey" placeholder="AIza..."></div>
+        <div><label>Auth Domain</label><input type="text" id="fb-authDomain" placeholder="projet.firebaseapp.com"></div>
+        <div><label>Database URL *</label><input type="text" id="fb-databaseURL" placeholder="https://projet-default-rtdb.firebaseio.com"></div>
+        <div><label>Project ID</label><input type="text" id="fb-projectId" placeholder="mon-projet"></div>
+        <div><label>Storage Bucket</label><input type="text" id="fb-storageBucket" placeholder="projet.appspot.com"></div>
+        <div><label>Messaging Sender ID</label><input type="text" id="fb-messagingSenderId" placeholder="123456789"></div>
+        <div><label>App ID</label><input type="text" id="fb-appId" placeholder="1:123:web:abc"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-success btn-sm" onclick="saveFirebaseConfig()">💾 Sauvegarder config</button>
+        <button class="btn btn-muted btn-sm" onclick="testFirebase()">🧪 Tester la connexion</button>
+        <button class="btn btn-danger btn-sm" onclick="clearFirebaseConfig()">🗑 Effacer config</button>
+      </div>
+      <div id="firebase-test-result" style="min-height:16px;font-size:.78rem;margin-top:8px;"></div>
+    </div>
+
+    <div class="card" style="border-color:rgba(248,81,73,.3);">
+      <div class="card-title" style="color:var(--danger);">⚠️ Zone dangereuse</div>
+      <p style="font-size:.82rem;color:var(--muted);margin-bottom:14px;">Supprimer tous les clients de la base de données. Irréversible.</p>
+      <button class="btn btn-danger" onclick="clearAll()">🗑️ Supprimer tous les clients</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL AJOUT/EDIT CLIENT -->
+<div id="modal-add" class="modal-wrap">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-add-title">➕ Nouveau client</div>
+      <button class="modal-close" onclick="closeModal('modal-add')">✕</button>
+    </div>
+    <div class="form-row">
+      <div>
+        <label>Nom complet *</label>
+        <input type="text" id="f-nom" placeholder="ex : Jean Dupont">
+      </div>
+      <div>
+        <label>Entreprise</label>
+        <input type="text" id="f-entreprise" placeholder="ex : Transport SARL">
+      </div>
+    </div>
+
+    <div style="margin-bottom:12px;">
+      <label>Type de licence *</label>
+      <div class="sub-type-toggle">
+        <button type="button" class="sub-btn" id="btn-abo"  onclick="selectType('ABONNE')">📅 Abonnement</button>
+        <button type="button" class="sub-btn" id="btn-life" onclick="selectType('LIFE')">♾️ Définitif</button>
+        <button type="button" class="sub-btn" id="btn-24h"  onclick="selectType('24H')">⏱️ 24h Essai</button>
+      </div>
+      <input type="hidden" id="f-type" value="">
+    </div>
+
+    <div id="duration-section" style="display:none;margin-bottom:12px;">
+      <label>Durée de l'abonnement *</label>
+      <select id="f-duration" onchange="onDurationChange()">
+        <option value="">-- Choisir durée --</option>
+        <option value="1">1 mois</option>
+        <option value="3">3 mois</option>
+        <option value="6">6 mois</option>
+        <option value="12">1 an</option>
+        <option value="custom">Date personnalisée</option>
+      </select>
+    </div>
+    <div id="custom-date-section" style="display:none;margin-bottom:12px;">
+      <label>Date d'expiration</label>
+      <input type="month" id="f-expiry-month">
+    </div>
+    <div id="expiry-preview" style="display:none;margin-bottom:12px;padding:10px;background:rgba(227,162,58,.08);border:1px solid rgba(227,162,58,.25);border-radius:8px;font-size:.82rem;">
+      📅 Expiration : <strong id="expiry-preview-val" style="color:var(--orange);"></strong>
+    </div>
+
+    <div style="margin-bottom:14px;">
+      <label>Notes (optionnel)</label>
+      <textarea id="f-notes" placeholder="Informations complémentaires..." rows="2" style="resize:none;"></textarea>
+    </div>
+
+    <button class="btn btn-success btn-full" onclick="generateAndSave()" style="margin-bottom:10px;">
+      ⚡ Générer les IDs et enregistrer
+    </button>
+
+    <div id="keys-result" style="display:none;">
+      <div class="section-title" style="margin-top:4px;">IDs d'activation générés</div>
+      <div class="key-box">
+        <div class="key-lbl">📱 Appareil 1</div>
+        <div class="key-val" id="key-d1"></div>
+        <button class="btn btn-primary btn-sm" onclick="copyKey('key-d1',this)">📋 Copier</button>
+      </div>
+      <div class="key-box">
+        <div class="key-lbl">📱 Appareil 2</div>
+        <div class="key-val" id="key-d2"></div>
+        <button class="btn btn-primary btn-sm" onclick="copyKey('key-d2',this)">📋 Copier</button>
+      </div>
+      <p style="font-size:.73rem;color:var(--muted);margin-top:6px;">⚠️ Transmettez chaque ID à l'appareil correspondant du client. Maximum 2 appareils par licence.</p>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL RENOUVELLEMENT -->
+<div id="modal-renew" class="modal-wrap">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">🔄 Renouveler l'abonnement</div>
+      <button class="modal-close" onclick="closeModal('modal-renew')">✕</button>
+    </div>
+    <div id="renew-client-info" style="margin-bottom:16px;padding:12px;background:var(--card2);border-radius:8px;font-size:.85rem;"></div>
+    <div style="margin-bottom:12px;">
+      <label>Nouvelle durée</label>
+      <select id="r-duration" onchange="onRenewDurationChange()">
+        <option value="1">1 mois</option>
+        <option value="3">3 mois</option>
+        <option value="6">6 mois</option>
+        <option value="12">1 an</option>
+        <option value="custom">Date personnalisée</option>
+      </select>
+    </div>
+    <div id="r-custom-date" style="display:none;margin-bottom:12px;">
+      <label>Date d'expiration</label>
+      <input type="month" id="r-expiry-month">
+    </div>
+    <div id="r-preview" style="margin-bottom:14px;padding:10px;background:rgba(63,185,80,.08);border:1px solid rgba(63,185,80,.25);border-radius:8px;font-size:.82rem;">
+      📅 Nouvelle expiration : <strong id="r-preview-val" style="color:var(--success);"></strong>
+    </div>
+    <button class="btn btn-success btn-full" onclick="doRenew()">✅ Confirmer le renouvellement</button>
+    <div id="renew-keys" style="display:none;margin-top:10px;">
+      <div class="section-title">Nouveaux IDs d'activation</div>
+      <div class="key-box">
+        <div class="key-lbl">📱 Appareil 1</div>
+        <div class="key-val" id="r-key-d1"></div>
+        <button class="btn btn-primary btn-sm" onclick="copyKey('r-key-d1',this)">📋 Copier</button>
+      </div>
+      <div class="key-box">
+        <div class="key-lbl">📱 Appareil 2</div>
+        <div class="key-val" id="r-key-d2"></div>
+        <button class="btn btn-primary btn-sm" onclick="copyKey('r-key-d2',this)">📋 Copier</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════
+//  CONFIGURATION FIREBASE — REMPLACEZ CES VALEURS
+//  1. Allez sur https://console.firebase.google.com
+//  2. Créez un projet → Realtime Database → Créer une base
+//  3. Règles : { "rules": { ".read": true, ".write": true } }
+//  4. Copiez la config SDK ici ET dans les apps client
+// ══════════════════════════════════════════════════════
+const FIREBASE_CONFIG = {
+  apiKey:            "VOTRE_API_KEY",
+  authDomain:        "VOTRE_PROJECT.firebaseapp.com",
+  databaseURL:       "https://VOTRE_PROJECT-default-rtdb.firebaseio.com",
+  projectId:         "VOTRE_PROJECT",
+  storageBucket:     "VOTRE_PROJECT.appspot.com",
+  messagingSenderId: "VOTRE_SENDER_ID",
+  appId:             "VOTRE_APP_ID"
+};
+
+let _db = null;
+let _demandesData = {};
+let _unsubscribe = null;
+
+function getActiveFirebaseConfig() {
+  const saved = DB.getVal('firebase_config', null);
+  if (saved && saved.apiKey && saved.apiKey !== 'VOTRE_API_KEY') return saved;
+  if (FIREBASE_CONFIG.apiKey !== 'VOTRE_API_KEY') return FIREBASE_CONFIG;
+  return null;
+}
+
+function initFirebase() {
+  try {
+    const cfg = getActiveFirebaseConfig();
+    if (!cfg) {
+      showFirebaseStatus('cfg', '⚙️ Firebase non configuré — entrez vos clés dans Paramètres');
+      return false;
+    }
+    if (!firebase.apps.length) firebase.initializeApp(cfg);
+    _db = firebase.database();
+    showFirebaseStatus('ok', '✅ Firebase connecté — notifications en temps réel actives');
+    return true;
+  } catch(e) {
+    showFirebaseStatus('err', '❌ Erreur Firebase : ' + e.message);
+    return false;
+  }
+}
+
+function showFirebaseStatus(type, msg) {
+  const el = document.getElementById('firebase-status-bar');
+  if (!el) return;
+  const cls = {ok:'firebase-ok', err:'firebase-err', cfg:'firebase-cfg'}[type]||'firebase-cfg';
+  el.innerHTML = `<div class="firebase-status ${cls}">${msg}</div>`;
+}
+
+function loadDemandes() {
+  if (!_db) { initFirebase(); if (!_db) { renderDemandesLocal(); return; } }
+  if (_unsubscribe) _unsubscribe();
+  showFirebaseStatus('ok','✅ Connexion Firebase active — écoute en temps réel...');
+  _db.ref('demandes').on('value', snap => {
+    _demandesData = snap.val() || {};
+    renderDemandes();
+    updateBadge();
+  }, err => {
+    showFirebaseStatus('err', '❌ Erreur lecture Firebase : ' + err.message);
+  });
+}
+
+function renderDemandes() {
+  const list   = document.getElementById('demandes-list');
+  const filter = document.getElementById('df-status').value;
+  const entries = Object.entries(_demandesData)
+    .map(([id, d]) => ({...d, _id: id}))
+    .filter(d => !filter || d.status === filter)
+    .sort((a,b) => (b.dateSubmitted||'').localeCompare(a.dateSubmitted||''));
+
+  if (!entries.length) {
+    list.innerHTML = `<div class="empty">${filter==='pending'?'Aucune demande en attente pour le moment.':'Aucune demande trouvée.'}</div>`;
+    return;
+  }
+
+  list.innerHTML = entries.map(d => {
+    const statusBadge = d.status==='pending'
+      ? '<span class="badge bo">⏳ En attente</span>'
+      : d.status==='validated'
+        ? '<span class="badge bg">✅ Validé</span>'
+        : '<span class="badge br">❌ Rejeté</span>';
+    const appBadge = d.appType==='ABONNE'
+      ? '<span class="badge bo">📅 Abonné</span>'
+      : '<span class="badge bp">♾️ Définitif</span>';
+    const dateStr = d.dateSubmitted ? new Date(d.dateSubmitted).toLocaleString('fr-FR') : '—';
+
+    const isPending = d.status === 'pending';
+
+    return `<div class="demande-card ${d.status||'pending'}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+        <div>
+          <div style="font-weight:700;font-size:.95rem;">${d.nom}</div>
+          ${d.entreprise?`<div style="color:var(--muted);font-size:.78rem;">${d.entreprise}</div>`:''}
+          <div style="color:var(--muted);font-size:.72rem;margin-top:3px;">📅 ${dateStr}</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          ${appBadge} ${statusBadge}
+        </div>
+      </div>
+
+      ${d.status==='validated' && d.device1Key ? `
+        <div style="background:rgba(63,185,80,.06);border:1px solid rgba(63,185,80,.2);border-radius:8px;padding:10px;margin-bottom:10px;font-size:.78rem;">
+          <div style="color:var(--success);font-weight:600;margin-bottom:6px;">IDs transmis au client :</div>
+          <div style="font-family:monospace;color:var(--primary);">📱 App. 1 : ${d.device1Key}</div>
+          <div style="font-family:monospace;color:var(--primary);">📱 App. 2 : ${d.device2Key}</div>
+        </div>` : ''}
+
+      ${isPending ? `
+        <div id="validate-panel-${d._id}" style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;">
+          <div class="section-title" style="margin-bottom:8px;">Valider cette demande</div>
+          ${d.appType==='ABONNE' ? `
+            <div style="margin-bottom:8px;">
+              <label>Durée abonnement</label>
+              <select id="dur-${d._id}">
+                <option value="1">1 mois</option>
+                <option value="3" selected>3 mois</option>
+                <option value="6">6 mois</option>
+                <option value="12">1 an</option>
+              </select>
+            </div>` : ''}
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="btn btn-success btn-sm" onclick="validateDemande('${d._id}','${d.nom}','${d.appType}')">
+              ✅ Valider &amp; Générer IDs
+            </button>
+            <button class="btn btn-danger btn-sm" onclick="rejectDemande('${d._id}')">
+              ❌ Rejeter
+            </button>
+          </div>
+        </div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderDemandesLocal() {
+  document.getElementById('demandes-list').innerHTML =
+    '<div class="empty">Firebase non configuré. Les demandes ne peuvent pas être reçues sans Firebase.<br><br>Voir l\'onglet <strong>⚙️ Paramètres</strong> pour la procédure de configuration.</div>';
+}
+
+function updateBadge() {
+  const count = Object.values(_demandesData).filter(d=>d.status==='pending').length;
+  const badge = document.getElementById('demandes-badge');
+  if (!badge) return;
+  if (count > 0) { badge.style.display='inline-flex'; badge.textContent=count; }
+  else           { badge.style.display='none'; }
+}
+
+function validateDemande(id, nom, appType) {
+  if (!_db) return alert('Firebase non configuré.');
+  let yymm = 'LIFE';
+  if (appType === 'ABONNE') {
+    const durEl = document.getElementById('dur-'+id);
+    const dur = durEl ? parseInt(durEl.value) : 3;
+    const d = new Date(); d.setMonth(d.getMonth()+dur);
+    yymm = String(d.getFullYear()).slice(2) + String(d.getMonth()+1).padStart(2,'0');
+  }
+  const keyType = appType==='LIFE' ? 'LIFE' : yymm;
+  const k1 = genKey(nom, keyType, '1');
+  const k2 = genKey(nom, keyType, '2');
+  _db.ref('demandes/'+id).update({
+    status:      'validated',
+    device1Key:  k1,
+    device2Key:  k2,
+    validatedAt: new Date().toISOString()
+  }).then(() => {
+    // Also save to local client list
+    const clients = getClients();
+    if (!clients.find(c=>c.nom.toLowerCase()===nom.toLowerCase())) {
+      clients.push({
+        id: Date.now().toString(), nom,
+        entreprise: _demandesData[id]?.entreprise || '',
+        type: appType==='ABONNE'?'ABONNE':'LIFE',
+        yymm: keyType!=='LIFE'?keyType:null,
+        keys: {d1:k1, d2:k2},
+        status:'active',
+        dateCreated: new Date().toISOString()
+      });
+      DB.set('admin_clients', clients);
+    }
+    renderClients(); renderStats();
+  }).catch(e => alert('Erreur Firebase : '+e.message));
+}
+
+function rejectDemande(id) {
+  if (!_db) return;
+  if (!confirm('Rejeter cette demande ?')) return;
+  _db.ref('demandes/'+id).update({ status:'rejected', rejectedAt: new Date().toISOString() });
+}
+
+// ══════════════════════════════════════════════════
+//  TOPIC NTFY — CHANGEZ CETTE VALEUR (même dans les 3 fichiers)
+//  Nom unique difficile à deviner, ex: "fleettrack-rakoto-2024"
+//  Admin installe ntfy app → subscribe à ce topic pour recevoir les notifications
+//  Télécharger : https://ntfy.sh  (gratuit, Android & iOS)
+// ══════════════════════════════════════════════════
+let NTFY_TOPIC = localStorage.getItem('ntfy_topic') || 'ft-9wn9h8un';
+if (!localStorage.getItem('ntfy_topic')) localStorage.setItem('ntfy_topic','ft-9wn9h8un');
+
+// ===== NTFY FUNCTIONS (ADMIN) =====
+async function loadNtfyMessages() {
+  if (!NTFY_TOPIC || NTFY_TOPIC.includes('CHANGEZ')) return [];
+  try {
+    const resp = await fetch(`https://ntfy.sh/${NTFY_TOPIC}/json?poll=1&since=48h`, { cache:'no-store' });
+    if (!resp.ok) return [];
+    const text = await resp.text();
+    return text.trim().split('\n').filter(Boolean)
+      .map(l => { try { return JSON.parse(l); } catch(e) { return null; } })
+      .filter(m => m && m.event === 'message')
+      .reverse();
+  } catch(e) { return []; }
+}
+
+async function renderNtfyPanel() {
+  const panel = document.getElementById('ntfy-panel');
+  if (!panel) return;
+  if (!NTFY_TOPIC || NTFY_TOPIC.includes('CHANGEZ')) {
+    panel.innerHTML = '<div class="empty">⚙️ Configurez le topic ntfy dans Paramètres pour voir les notifications.</div>';
+    return;
+  }
+  panel.innerHTML = '<div class="empty" style="padding:12px;">🔄 Chargement...</div>';
+  const msgs = await loadNtfyMessages();
+  if (!msgs.length) {
+    panel.innerHTML = '<div class="empty">Aucune notification reçue dans les dernières 48h.</div>';
+    return;
+  }
+  panel.innerHTML = msgs.map(m => {
+    const date = new Date(m.time * 1000).toLocaleString('fr-FR');
+    const isConnect = (m.tags||[]).includes('phone') || m.title?.includes('connecté');
+    const isRequest = (m.tags||[]).includes('bell')  || m.title?.includes('demande');
+    const color = isRequest ? 'var(--warning)' : 'var(--primary)';
+    return `<div style="border-left:3px solid ${color};padding:10px 12px;margin-bottom:8px;
+      background:var(--card2);border-radius:0 8px 8px 0;font-size:.82rem;">
+      <div style="font-weight:700;color:${color};margin-bottom:3px;">${m.title||'Notification'}</div>
+      <div style="color:var(--text);white-space:pre-wrap;">${m.message||''}</div>
+      <div style="color:var(--muted);font-size:.7rem;margin-top:4px;">🕐 ${date}</div>
+    </div>`;
+  }).join('');
+}
+
+// ===== SECRET =====
+const _SK  = atob('RkxFRVRUUkFDS01ERzIwMjQ=');
+const DEFAULT_PWD = atob('RkxFRVRAMjAyNA==');
+const _SK2 = [70,76,84,50,53,55,77,71,50,52].map(c=>String.fromCharCode(c)).join('');
+
+function _hashName(name) {
+  const base = name.trim().toLowerCase();
+  const s1 = base + _SK;
+  let h1 = 5381;
+  for (let i = 0; i < s1.length; i++) { h1 = (Math.imul(h1, 33) + s1.charCodeAt(i)) | 0; }
+  h1 = h1 >>> 0;
+  const s2 = _SK2 + [...base].reverse().join('') + _SK.slice(4, 8);
+  let h2 = 2166136261;
+  for (let i = 0; i < s2.length; i++) { h2 = Math.imul(h2 ^ s2.charCodeAt(i), 16777619) >>> 0; }
+  const h = Math.imul((h1 ^ h2) >>> 0, 1000003) >>> 0;
+  const x = h.toString(16).toUpperCase().padStart(8, '0');
+  return `${x.slice(0,4)}-${x.slice(4,8)}`;
+}
+
+function genKey(name, type, device) {
+  // type: 'LIFE' | 'YYMM' e.g. '2612'
+  return `FT-${_hashName(name)}-${type}-${device}`;
+}
+
+function computeYYMM(months) {
+  const d = new Date();
+  d.setMonth(d.getMonth() + months);
+  const yy = String(d.getFullYear()).slice(2);
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  return yy + mm;
+}
+
+function yymmToDate(yymm) {
+  const yr = 2000 + parseInt(yymm.slice(0,2));
+  const mo = parseInt(yymm.slice(2,4));
+  return new Date(yr, mo, 0, 23, 59, 59);
+}
+
+function formatDate(d) {
+  return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'});
+}
+
+function daysLeft(yymm) {
+  const exp = yymmToDate(yymm);
+  return Math.ceil((exp - new Date()) / 86400000);
+}
+
+// ===== STORAGE =====
+const DB = {
+  get:    k => JSON.parse(localStorage.getItem(k)||'[]'),
+  set:    (k,v) => localStorage.setItem(k,JSON.stringify(v)),
+  getVal: (k,d) => { const v=localStorage.getItem(k); return v!==null?JSON.parse(v):d; },
+  setVal: (k,v) => localStorage.setItem(k,JSON.stringify(v)),
+};
+const getClients  = () => DB.get('admin_clients');
+const getAdminPwd = () => DB.getVal('admin_pwd', DEFAULT_PWD);
+
+// ===== AUTH =====
+function doLogin() {
+  const pwd = document.getElementById('login-pwd').value;
+  if (pwd === getAdminPwd()) {
+    document.getElementById('login-wrap').style.display = 'none';
+    document.getElementById('app').classList.add('visible');
+    document.getElementById('login-pwd').value = '';
+    document.getElementById('login-err').textContent = '';
+    initFirebase();
+    loadSettingsUI();
+    refreshAll();
+  } else {
+    document.getElementById('login-err').textContent = '❌ Mot de passe incorrect.';
+    document.getElementById('login-pwd').value = '';
+    document.getElementById('login-pwd').focus();
+  }
+}
+function doLogout() {
+  if (!confirm('Se déconnecter ?')) return;
+  document.getElementById('app').classList.remove('visible');
+  document.getElementById('login-wrap').style.display = 'flex';
+}
+
+// ===== NAV =====
+let _pageHistory = [];
+let _currentPage = 'clients';
+
+function showPage(p, btn) {
+  if (p !== _currentPage) _pageHistory.push(_currentPage);
+  _currentPage = p;
+  document.querySelectorAll('.page').forEach(e=>e.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(e=>e.classList.remove('active'));
+  document.getElementById('page-'+p).classList.add('active');
+  if (btn) btn.classList.add('active');
+  // Update bottom nav
+  ['clients','demandes','stats','settings'].forEach(id => {
+    const el = document.getElementById('bnav-'+id);
+    if (el) el.classList.toggle('active', id === p);
+  });
+  // Show/hide back button
+  const backBtn = document.getElementById('mob-back-btn');
+  if (backBtn) backBtn.style.display = _pageHistory.length > 0 ? 'flex' : 'none';
+  // Scroll to top
+  window.scrollTo(0, 0);
+  if (p==='demandes') loadDemandes();
+  else refreshAll();
+}
+
+function mobileBack() {
+  if (_pageHistory.length > 0) {
+    const prev = _pageHistory.pop();
+    _currentPage = prev;
+    document.querySelectorAll('.page').forEach(e=>e.classList.remove('active'));
+    document.getElementById('page-'+prev).classList.add('active');
+    ['clients','demandes','stats','settings'].forEach(id => {
+      const el = document.getElementById('bnav-'+id);
+      if (el) el.classList.toggle('active', id === prev);
+    });
+    const backBtn = document.getElementById('mob-back-btn');
+    if (backBtn) backBtn.style.display = _pageHistory.length > 0 ? 'flex' : 'none';
+    window.scrollTo(0, 0);
+    if (prev === 'demandes') loadDemandes(); else refreshAll();
+  }
+}
+
+// Android hardware back button
+document.addEventListener('backbutton', function(e) {
+  e.preventDefault();
+  const openModal = document.querySelector('.modal-wrap.open');
+  if (openModal) { closeModal(openModal.id); return; }
+  if (_pageHistory.length > 0) { mobileBack(); }
+}, false);
+
+// ===== MODAL ADD =====
+let editingId = null;
+
+function openAddModal() {
+  editingId = null;
+  document.getElementById('modal-add-title').textContent = '➕ Nouveau client';
+  ['f-nom','f-entreprise','f-notes'].forEach(id => document.getElementById(id).value='');
+  document.getElementById('f-type').value = '';
+  document.getElementById('f-duration').value = '';
+  document.getElementById('f-expiry-month').value = '';
+  document.getElementById('duration-section').style.display = 'none';
+  document.getElementById('custom-date-section').style.display = 'none';
+  document.getElementById('expiry-preview').style.display = 'none';
+  document.getElementById('keys-result').style.display = 'none';
+  document.getElementById('btn-abo').className = 'sub-btn';
+  document.getElementById('btn-life').className = 'sub-btn';
+  document.getElementById('btn-24h').className  = 'sub-btn';
+  document.getElementById('modal-add').classList.add('open');
+  setTimeout(()=>document.getElementById('f-nom').focus(),100);
+}
+
+function selectType(t) {
+  document.getElementById('f-type').value = t;
+  document.getElementById('btn-abo').className  = 'sub-btn' + (t==='ABONNE'?' active-abo':'');
+  document.getElementById('btn-life').className = 'sub-btn' + (t==='LIFE'?' active-life':'');
+  document.getElementById('btn-24h').className  = 'sub-btn' + (t==='24H'?' active-trial':'');
+  document.getElementById('duration-section').style.display = t==='ABONNE' ? 'block' : 'none';
+  document.getElementById('custom-date-section').style.display = 'none';
+  document.getElementById('expiry-preview').style.display = 'none';
+  if (t==='LIFE') {
+    document.getElementById('expiry-preview').style.display = 'block';
+    document.getElementById('expiry-preview-val').textContent = 'Illimité — Licence permanente ♾️';
+    document.getElementById('expiry-preview-val').style.color = 'var(--success)';
+  }
+  if (t==='24H') {
+    document.getElementById('expiry-preview').style.display = 'block';
+    document.getElementById('expiry-preview-val').textContent = 'Période d\'essai de 24 heures dès la première activation ⏱️';
+    document.getElementById('expiry-preview-val').style.color = 'var(--warning)';
+  }
+}
+
+function onDurationChange() {
+  const v = document.getElementById('f-duration').value;
+  const cds = document.getElementById('custom-date-section');
+  const ep  = document.getElementById('expiry-preview');
+  if (v === 'custom') { cds.style.display='block'; ep.style.display='none'; return; }
+  cds.style.display = 'none';
+  if (!v) { ep.style.display='none'; return; }
+  const yymm = computeYYMM(parseInt(v));
+  document.getElementById('expiry-preview-val').textContent = formatDate(yymmToDate(yymm));
+  document.getElementById('expiry-preview-val').style.color = 'var(--orange)';
+  ep.style.display = 'block';
+}
+
+function getYYMMFromForm() {
+  const dur = document.getElementById('f-duration').value;
+  if (dur === 'custom') {
+    const v = document.getElementById('f-expiry-month').value;
+    if (!v) return null;
+    const [yr,mo] = v.split('-');
+    return String(yr).slice(2) + mo;
+  }
+  if (!dur) return null;
+  return computeYYMM(parseInt(dur));
+}
+
+function generateAndSave() {
+  const nom        = document.getElementById('f-nom').value.trim();
+  const entreprise = document.getElementById('f-entreprise').value.trim();
+  const type       = document.getElementById('f-type').value;
+  const notes      = document.getElementById('f-notes').value.trim();
+  if (!nom)  return alert('Veuillez saisir le nom complet du client.');
+  if (!type) return alert('Veuillez choisir le type de licence.');
+
+  let yymm = null;
+  if (type === 'ABONNE') {
+    yymm = getYYMMFromForm();
+    if (!yymm) return alert('Veuillez choisir la durée ou la date d\'expiration.');
+  }
+
+  const clients = getClients();
+  if (!editingId && clients.find(c=>c.nom.toLowerCase()===nom.toLowerCase()))
+    return alert('Un client avec ce nom existe déjà.');
+
+  const keyType = type === 'LIFE' ? 'LIFE' : type === '24H' ? '24H' : yymm;
+  const k1 = genKey(nom, keyType, '1');
+  const k2 = genKey(nom, keyType, '2');
+
+  const client = {
+    id:          editingId || Date.now().toString(),
+    nom, entreprise, notes, type,
+    yymm,
+    keys:        { d1: k1, d2: k2 },
+    status:      'active',
+    dateCreated: editingId ? clients.find(c=>c.id===editingId)?.dateCreated : new Date().toISOString(),
+  };
+
+  if (editingId) {
+    const idx = clients.findIndex(c=>c.id===editingId);
+    if (idx>=0) clients[idx] = client;
+  } else {
+    clients.push(client);
+  }
+  DB.set('admin_clients', clients);
+
+  document.getElementById('key-d1').textContent = k1;
+  document.getElementById('key-d2').textContent = k2;
+  document.getElementById('keys-result').style.display = 'block';
+  renderClients(); renderStats();
+}
+
+function copyKey(elemId, btn) {
+  const key = document.getElementById(elemId).textContent;
+  navigator.clipboard.writeText(key).then(()=>{
+    btn.textContent = '✅ Copié !';
+    setTimeout(()=>btn.textContent='📋 Copier', 2000);
+  });
+}
+
+// ===== RENEWAL =====
+let renewId = null;
+
+function openRenew(id) {
+  const c = getClients().find(x=>x.id===id);
+  if (!c || c.type!=='ABONNE') return;
+  renewId = id;
+  document.getElementById('renew-client-info').innerHTML = `
+    <strong>${c.nom}</strong>${c.entreprise?' — '+c.entreprise:''}<br>
+    <span style="color:var(--muted);font-size:.78rem;">
+      Expiration actuelle : ${c.yymm ? formatDate(yymmToDate(c.yymm)) : '—'}
+    </span>`;
+  document.getElementById('r-duration').value = '3';
+  document.getElementById('r-custom-date').style.display = 'none';
+  document.getElementById('renew-keys').style.display = 'none';
+  onRenewDurationChange();
+  document.getElementById('modal-renew').classList.add('open');
+}
+
+function onRenewDurationChange() {
+  const v = document.getElementById('r-duration').value;
+  document.getElementById('r-custom-date').style.display = v==='custom'?'block':'none';
+  if (v==='custom') return;
+  const yymm = computeYYMM(parseInt(v));
+  document.getElementById('r-preview-val').textContent = formatDate(yymmToDate(yymm));
+}
+
+function doRenew() {
+  const c = getClients().find(x=>x.id===renewId);
+  if (!c) return;
+  const v = document.getElementById('r-duration').value;
+  let yymm;
+  if (v==='custom') {
+    const mv = document.getElementById('r-expiry-month').value;
+    if (!mv) return alert('Choisissez une date.');
+    const [yr,mo] = mv.split('-');
+    yymm = String(yr).slice(2) + mo;
+  } else {
+    yymm = computeYYMM(parseInt(v));
+  }
+
+  const k1 = genKey(c.nom, yymm, '1');
+  const k2 = genKey(c.nom, yymm, '2');
+  const clients = getClients();
+  const idx = clients.findIndex(x=>x.id===renewId);
+  clients[idx].yymm = yymm;
+  clients[idx].keys = { d1:k1, d2:k2 };
+  clients[idx].status = 'active';
+  DB.set('admin_clients', clients);
+
+  document.getElementById('r-key-d1').textContent = k1;
+  document.getElementById('r-key-d2').textContent = k2;
+  document.getElementById('renew-keys').style.display = 'block';
+  renderClients(); renderStats();
+}
+
+// ===== CLIENT LIST =====
+function renderClients() {
+  const tbody   = document.getElementById('clients-tbody');
+  const q       = document.getElementById('search-q').value.toLowerCase();
+  const ftype   = document.getElementById('filter-type').value;
+  const fstatus = document.getElementById('filter-status').value;
+  let clients   = getClients();
+
+  if (q)       clients = clients.filter(c=>c.nom.toLowerCase().includes(q)||(c.entreprise||'').toLowerCase().includes(q));
+  if (ftype)   clients = clients.filter(c=>c.type===ftype);
+
+  // Compute effective status (including expiry)
+  clients = clients.map(c => {
+    let expStatus = c.status;
+    if (c.type==='ABONNE' && c.yymm && c.status==='active') {
+      if (daysLeft(c.yymm) < 0) expStatus = 'expired';
+    }
+    return {...c, expStatus};
+  });
+
+  if (fstatus) clients = clients.filter(c=>c.expStatus===fstatus);
+
+  if (!clients.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty">Aucun client trouvé.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = clients.map(c => {
+    const typeBadge = c.type==='LIFE'
+      ? '<span class="badge bp">♾️ Définitif</span>'
+      : c.type==='24H'
+        ? '<span class="badge bm">⏱️ Essai 24h</span>'
+        : '<span class="badge bo">📅 Abonnement</span>';
+
+    let expiryCell = '—';
+    let resteCell  = '—';
+    if (c.type==='ABONNE' && c.yymm) {
+      const dl = daysLeft(c.yymm);
+      expiryCell = formatDate(yymmToDate(c.yymm));
+      if (dl < 0)       resteCell = `<span class="expire-dead">Expiré</span>`;
+      else if (dl <= 14) resteCell = `<span class="expire-warn">⚠️ ${dl}j</span>`;
+      else               resteCell = `<span class="expire-ok">${dl} jours</span>`;
+    } else if (c.type==='LIFE') {
+      expiryCell = '<span style="color:var(--success)">Illimitée</span>';
+      resteCell  = '<span style="color:var(--success)">♾️</span>';
+    } else if (c.type==='24H') {
+      expiryCell = '<span style="color:var(--muted)">24h dès activation</span>';
+      resteCell  = '<span style="color:var(--muted)">⏱️</span>';
+    }
+
+    const statusBadge = c.expStatus==='expired'
+      ? '<span class="badge br">❌ Expiré</span>'
+      : c.status==='active'
+        ? '<span class="badge bg">✅ Actif</span>'
+        : '<span class="badge bm">⏸ Suspendu</span>';
+
+    return `<tr>
+      <td>
+        <strong>${c.nom}</strong>
+        ${c.entreprise?`<div style="font-size:.72rem;color:var(--muted)">${c.entreprise}</div>`:''}
+      </td>
+      <td>${typeBadge}</td>
+      <td style="font-size:.78rem;">${expiryCell}</td>
+      <td>${resteCell}</td>
+      <td>
+        <span style="font-family:monospace;font-size:.72rem;color:var(--primary);">${c.keys?.d1||'—'}</span>
+        <button class="btn btn-muted btn-sm" style="margin-left:4px;" onclick="copyKey2('${c.keys?.d1}',this)">📋</button>
+      </td>
+      <td>
+        <span style="font-family:monospace;font-size:.72rem;color:var(--primary);">${c.keys?.d2||'—'}</span>
+        <button class="btn btn-muted btn-sm" style="margin-left:4px;" onclick="copyKey2('${c.keys?.d2}',this)">📋</button>
+      </td>
+      <td>${statusBadge}</td>
+      <td>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;">
+          ${c.type==='ABONNE'?`<button class="btn btn-warn btn-sm" onclick="openRenew('${c.id}')" title="Renouveler">🔄</button>`:''}
+          <button class="btn btn-muted btn-sm" onclick="sendRowWhatsApp('${c.id}')" title="Envoyer clés par WhatsApp">📱</button>
+          <button class="btn btn-sm ${c.status==='active'?'btn-danger':'btn-success'}"
+            onclick="toggleStatus('${c.id}')" title="${c.status==='active'?'Suspendre':'Réactiver'}">
+            ${c.status==='active'?'⏸':'▶'}
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="delClient('${c.id}')" title="Supprimer">🗑</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function copyKey2(key, btn) {
+  if (!key) return;
+  navigator.clipboard.writeText(key).then(()=>{
+    btn.textContent='✅'; setTimeout(()=>btn.textContent='📋',2000);
+  });
+}
+
+async function sendAdminCmd(type, client) {
+  if (!NTFY_TOPIC || !client?.keys) return;
+  const keys = [client.keys.d1, client.keys.d2].filter(Boolean).join('|');
+  const icons = { SUSPEND:'⏸', REACTIVATE:'▶', REVOKE:'🚫' };
+  const labels = { SUSPEND:'Compte suspendu', REACTIVATE:'Compte réactivé', REVOKE:'Accès révoqué' };
+  try {
+    const cmdTitle = `CMD-${type} - ${client.nom}`;
+    const cmdUrl = `https://ntfy.sh/${NTFY_TOPIC}?title=${encodeURIComponent(cmdTitle)}&tags=cmd&priority=5`;
+    await fetch(cmdUrl, {
+      method: 'POST',
+      body: `KEYS:${keys}\nNOM:${client.nom}`
+    });
+  } catch(e) { /* silent */ }
+}
+
+function toggleStatus(id) {
+  const cl = getClients(); const idx=cl.findIndex(c=>c.id===id); if(idx<0)return;
+  const wasActive = cl[idx].status === 'active';
+  cl[idx].status = wasActive ? 'suspended' : 'active';
+  DB.set('admin_clients', cl);
+  sendAdminCmd(wasActive ? 'SUSPEND' : 'REACTIVATE', cl[idx]);
+  renderClients(); renderStats();
+}
+
+function delClient(id) {
+  if (!confirm('Supprimer définitivement ce client ?\nSon accès sera révoqué immédiatement sur tous ses appareils.')) return;
+  const cl = getClients(); const c = cl.find(x=>x.id===id);
+  if (c) sendAdminCmd('REVOKE', c);
+  DB.set('admin_clients', cl.filter(x=>x.id!==id));
+  renderClients(); renderStats();
+}
+
+function clearAll() {
+  if (!confirm('Supprimer TOUS les clients ?')) return;
+  if (!confirm('Confirmation finale — Cette action est irréversible.')) return;
+  DB.set('admin_clients',[]); renderClients(); renderStats();
+}
+
+// ===== STATS =====
+function renderStats() {
+  const clients   = getClients();
+  const actifs    = clients.filter(c=>c.status==='active').length;
+  const suspendus = clients.filter(c=>c.status==='suspended').length;
+  const abonnes   = clients.filter(c=>c.type==='ABONNE').length;
+  const definitif = clients.filter(c=>c.type==='LIFE').length;
+  const essai24h  = clients.filter(c=>c.type==='24H').length;
+  const expires   = clients.filter(c=>c.type==='ABONNE'&&c.yymm&&daysLeft(c.yymm)<0).length;
+  const expireSoon= clients.filter(c=>c.type==='ABONNE'&&c.yymm&&daysLeft(c.yymm)>=0&&daysLeft(c.yymm)<=14).length;
+
+  const sg = document.getElementById('stats-grid');
+  if (!sg) return;
+  sg.innerHTML = `
+    <div class="stat-card"><div class="sico blue">👥</div><div><div class="sval">${clients.length}</div><div class="slbl">Total clients</div></div></div>
+    <div class="stat-card"><div class="sico green">✅</div><div><div class="sval">${actifs}</div><div class="slbl">Actifs</div></div></div>
+    <div class="stat-card"><div class="sico orange">📅</div><div><div class="sval">${abonnes}</div><div class="slbl">Abonnements</div></div></div>
+    <div class="stat-card"><div class="sico purple">♾️</div><div><div class="sval">${definitif}</div><div class="slbl">Définitifs</div></div></div>
+    <div class="stat-card"><div class="sico red">⏱️</div><div><div class="sval">${essai24h}</div><div class="slbl">Essais 24h</div></div></div>
+    <div class="stat-card"><div class="sico red">❌</div><div><div class="sval">${expires}</div><div class="slbl">Expirés</div></div></div>
+    <div class="stat-card"><div class="sico orange">⚠️</div><div><div class="sval">${expireSoon}</div><div class="slbl">Expire ≤ 14j</div></div></div>
+    <div class="stat-card"><div class="sico red">⏸</div><div><div class="sval">${suspendus}</div><div class="slbl">Suspendus</div></div></div>`;
+
+  // Expiring soon
+  const el = document.getElementById('expiring-list');
+  if (el) {
+    const exp = clients.filter(c=>c.type==='ABONNE'&&c.yymm).map(c=>({...c,dl:daysLeft(c.yymm)}))
+      .filter(c=>c.dl<=30).sort((a,b)=>a.dl-b.dl);
+    el.innerHTML = exp.length
+      ? exp.map(c=>`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:.82rem;">
+          <span><strong>${c.nom}</strong>${c.entreprise?` — ${c.entreprise}`:''}</span>
+          <span class="${c.dl<0?'expire-dead':c.dl<=14?'expire-warn':'expire-ok'}">
+            ${c.dl<0?'Expiré':c.dl===0?'Expire aujourd\'hui':`${c.dl}j`}
+          </span>
+        </div>`).join('')
+      : '<div class="empty">Aucun abonnement arrivant à échéance prochainement.</div>';
+  }
+
+  // Recent
+  const rl = document.getElementById('recent-list');
+  if (rl) {
+    const recent = [...clients].sort((a,b)=>b.dateCreated?.localeCompare(a.dateCreated)).slice(0,6);
+    rl.innerHTML = recent.length
+      ? recent.map(c=>`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:.82rem;">
+          <span><strong>${c.nom}</strong>${c.entreprise?` — ${c.entreprise}`:''}</span>
+          <span class="badge ${c.type==='LIFE'?'bp':'bo'}">${c.type==='LIFE'?'Définitif':'Abonnement'}</span>
+        </div>`).join('')
+      : '<div class="empty">Aucun client enregistré.</div>';
+  }
+}
+
+// ===== SETTINGS =====
+function changePwd() {
+  const cur=document.getElementById('s-pwd-cur').value;
+  const nw=document.getElementById('s-pwd-new').value;
+  const cf=document.getElementById('s-pwd-conf').value;
+  const msg=document.getElementById('s-pwd-msg');
+  if (cur!==getAdminPwd()){msg.style.color='var(--danger)';msg.textContent='❌ Mot de passe actuel incorrect.';return;}
+  if (nw.length<6){msg.style.color='var(--danger)';msg.textContent='❌ Minimum 6 caractères.';return;}
+  if (nw!==cf){msg.style.color='var(--danger)';msg.textContent='❌ Les mots de passe ne correspondent pas.';return;}
+  DB.setVal('admin_pwd',nw);
+  msg.style.color='var(--success)';msg.textContent='✅ Mot de passe modifié avec succès.';
+  ['s-pwd-cur','s-pwd-new','s-pwd-conf'].forEach(id=>document.getElementById(id).value='');
+  setTimeout(()=>msg.textContent='',3000);
+}
+
+// ===== TRAITEMENT MANUEL (WhatsApp) =====
+let _mClientPhone = '';
+
+function mSelectType(t) {
+  document.getElementById('m-type').value = t;
+  document.getElementById('m-btn-abo').className  = 'sub-btn'+(t==='ABONNE'?' active-abo':'');
+  document.getElementById('m-btn-life').className = 'sub-btn'+(t==='LIFE'?' active-life':'');
+  document.getElementById('m-btn-24h').className  = 'sub-btn'+(t==='24H'?' active-trial':'');
+  document.getElementById('m-dur-section').style.display = t==='ABONNE'?'block':'none';
+}
+
+function yymmToDateStr(yymm) {
+  const yr=2000+parseInt(yymm.slice(0,2)), mo=parseInt(yymm.slice(2,4));
+  return new Date(yr,mo,0).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'});
+}
+
+function traiterManuel() {
+  const nom  = document.getElementById('m-nom').value.trim();
+  const ent  = document.getElementById('m-entreprise').value.trim();
+  const type = document.getElementById('m-type').value;
+  if (!nom)  return alert('Saisissez le nom du client.');
+  if (!type) return alert('Choisissez le type de licence.');
+
+  let keyType = type === '24H' ? '24H' : 'LIFE';
+  if (type === 'ABONNE') {
+    const dur = parseInt(document.getElementById('m-duration').value);
+    const d = new Date(); d.setMonth(d.getMonth()+dur);
+    keyType = String(d.getFullYear()).slice(2) + String(d.getMonth()+1).padStart(2,'0');
+  }
+
+  const k1 = genKey(nom, keyType, '1');
+  const k2 = genKey(nom, keyType, '2');
+
+  document.getElementById('m-key1').textContent = k1;
+  document.getElementById('m-key2').textContent = k2;
+
+  const expiryTxt = type==='ABONNE'
+    ? `Abonnement valide jusqu'au : ${yymmToDateStr(keyType)}`
+    : type==='24H'
+      ? 'Période d\'essai : 24 heures dès la première activation ⏱️'
+      : 'Licence permanente ♾️';
+
+  const msg = [
+    '🚗 FleetTrack Pro — Activation',
+    '━━━━━━━━━━━━━━━━━━━━━━━━',
+    `Bonjour ${nom},`,
+    `Votre licence a été validée.`,
+    '',
+    `📱 Appareil 1 : ${k1}`,
+    `📱 Appareil 2 : ${k2}`,
+    '',
+    expiryTxt,
+    '━━━━━━━━━━━━━━━━━━━━━━━━',
+    'Saisissez votre ID dans l\'application pour l\'activer.'
+  ].join('\n');
+
+  document.getElementById('m-wa-msg-box').textContent = msg;
+  document.getElementById('manuel-result').style.display = 'block';
+
+  // Save to client list
+  const clients = getClients();
+  if (!clients.find(c=>c.nom.toLowerCase()===nom.toLowerCase())) {
+    clients.push({
+      id: Date.now().toString(), nom, entreprise: ent,
+      type, yymm: type==='ABONNE'?keyType:null,
+      keys:{d1:k1,d2:k2}, status:'active',
+      dateCreated: new Date().toISOString()
+    });
+    DB.set('admin_clients', clients);
+    renderClients(); renderStats();
+  }
+}
+
+function copyMResult() {
+  const msg = document.getElementById('m-wa-msg-box').textContent;
+  navigator.clipboard.writeText(msg).then(()=>{
+    const el=document.getElementById('m-copy-confirm');
+    el.textContent='✅ Copié !'; setTimeout(()=>el.textContent='',2500);
+  });
+}
+
+function sendMWhatsApp() {
+  const msg = document.getElementById('m-wa-msg-box').textContent;
+  const phone = (DB.getVal('admin_client_phone','')||'').replace(/\D/g,'');
+  const encoded = encodeURIComponent(msg);
+  window.open(phone?`https://wa.me/${phone}?text=${encoded}`:`https://wa.me/?text=${encoded}`, '_blank');
+}
+
+function saveNtfyTopic(val) {
+  NTFY_TOPIC = val.trim();
+  localStorage.setItem('ntfy_topic', NTFY_TOPIC);
+}
+
+async function testNtfy() {
+  const res = document.getElementById('ntfy-test-result');
+  if (!NTFY_TOPIC || NTFY_TOPIC.includes('CHANGEZ')) {
+    res.style.color='var(--danger)'; res.textContent='❌ Entrez un topic valide.'; return;
+  }
+  res.style.color='var(--muted)'; res.textContent='⏳ Envoi...';
+  try {
+    const testUrl = `https://ntfy.sh/${NTFY_TOPIC}?title=${encodeURIComponent('Test FleetTrack Admin')}&tags=white_check_mark&priority=4`;
+    const r = await fetch(testUrl, {
+      method:'POST',
+      body:'Test de notification depuis FleetTrack Admin — Si vous voyez ceci, la configuration est correcte !'
+    });
+    if (r.ok) { res.style.color='var(--success)'; res.textContent='✅ Notification envoyée ! Vérifiez votre téléphone.'; }
+    else       { res.style.color='var(--danger)';  res.textContent='❌ Erreur ntfy : ' + r.status; }
+  } catch(e) { res.style.color='var(--danger)'; res.textContent='❌ Erreur réseau : ' + e.message; }
+}
+
+function testFirebase() {
+  const res = document.getElementById('firebase-test-result');
+  if (!_db) { const ok=initFirebase(); if(!ok){res.style.color='var(--danger)';res.textContent='❌ Connexion échouée. Vérifiez la config.';return;} }
+  _db.ref('.info/connected').once('value').then(snap=>{
+    if (snap.val()) { res.style.color='var(--success)'; res.textContent='✅ Firebase connecté avec succès !'; }
+    else { res.style.color='var(--danger)'; res.textContent='❌ Pas de connexion Firebase.'; }
+  }).catch(e=>{res.style.color='var(--danger)';res.textContent='❌ Erreur : '+e.message;});
+}
+
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+function refreshAll(){renderClients();renderStats();}
+
+// ===== SETTINGS LOAD =====
+function loadSettingsUI() {
+  const topic = localStorage.getItem('ntfy_topic') || '';
+  NTFY_TOPIC = topic;
+  const ntfyEl = document.getElementById('s-ntfy-topic');
+  if (ntfyEl) ntfyEl.value = topic;
+
+  const phone = DB.getVal('admin_client_phone','');
+  const phoneEl = document.getElementById('s-client-phone');
+  if (phoneEl) phoneEl.value = phone;
+
+  const cfg = DB.getVal('firebase_config', null);
+  if (cfg) {
+    ['apiKey','authDomain','databaseURL','projectId','storageBucket','messagingSenderId','appId'].forEach(k => {
+      const el = document.getElementById('fb-'+k);
+      if (el && cfg[k]) el.value = cfg[k];
+    });
+  }
+}
+
+// ===== FIREBASE CONFIG UI =====
+function saveFirebaseConfig() {
+  const res = document.getElementById('firebase-test-result');
+  const keys = ['apiKey','authDomain','databaseURL','projectId','storageBucket','messagingSenderId','appId'];
+  const cfg = {};
+  keys.forEach(k => {
+    const el = document.getElementById('fb-'+k);
+    cfg[k] = el ? el.value.trim() : '';
+  });
+  if (!cfg.apiKey || !cfg.databaseURL) {
+    res.style.color='var(--danger)'; res.textContent='❌ API Key et Database URL sont obligatoires.';
+    return;
+  }
+  DB.setVal('firebase_config', cfg);
+  // Reset Firebase app to use new config
+  if (firebase.apps.length) {
+    firebase.apps[0].delete().then(() => { _db = null; initFirebase(); });
+  } else {
+    initFirebase();
+  }
+  res.style.color='var(--success)'; res.textContent='✅ Configuration Firebase sauvegardée. Testez la connexion →';
+}
+
+function clearFirebaseConfig() {
+  if (!confirm('Effacer la configuration Firebase ?')) return;
+  DB.setVal('firebase_config', null);
+  ['apiKey','authDomain','databaseURL','projectId','storageBucket','messagingSenderId','appId'].forEach(k => {
+    const el = document.getElementById('fb-'+k);
+    if (el) el.value = '';
+  });
+  _db = null;
+  document.getElementById('firebase-test-result').textContent = '';
+  showFirebaseStatus('cfg','⚙️ Firebase effacé — entrez une nouvelle configuration.');
+}
+
+// ===== EXPORT CSV =====
+function exportCSV() {
+  const clients = getClients();
+  if (!clients.length) return alert('Aucun client à exporter.');
+  const headers = ['Nom','Entreprise','Type','Expiration','Statut','Appareil 1','Appareil 2','Date création'];
+  const rows = clients.map(c => {
+    const expiry = c.type==='LIFE' ? 'Illimité'
+      : c.type==='24H' ? '24h essai'
+      : c.yymm ? yymmToDateStr(c.yymm) : '—';
+    return [
+      `"${c.nom||''}"`,
+      `"${c.entreprise||''}"`,
+      c.type,
+      expiry,
+      c.status,
+      c.keys?.d1||'',
+      c.keys?.d2||'',
+      c.dateCreated ? new Date(c.dateCreated).toLocaleDateString('fr-FR') : ''
+    ].join(',');
+  });
+  const csv = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `fleettrack-clients-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ===== WHATSAPP QUICK SEND FROM ROW =====
+function sendRowWhatsApp(id) {
+  const c = getClients().find(x=>x.id===id);
+  if (!c) return;
+  const expiry = c.type==='LIFE' ? 'Licence permanente ♾️'
+    : c.type==='24H' ? "Période d'essai : 24 heures dès activation ⏱️"
+    : `Abonnement valide jusqu'au : ${yymmToDateStr(c.yymm||'')}`;
+  const msg = [
+    '🚗 FleetTrack Pro — Activation',
+    '━━━━━━━━━━━━━━━━━━━━━━━━',
+    `Bonjour ${c.nom},`,
+    `Votre licence a été validée.`,
+    '',
+    `📱 Appareil 1 : ${c.keys?.d1||'—'}`,
+    `📱 Appareil 2 : ${c.keys?.d2||'—'}`,
+    '',
+    expiry,
+    '━━━━━━━━━━━━━━━━━━━━━━━━',
+    "Saisissez votre ID dans l'application pour l'activer."
+  ].join('\n');
+  const phone = (DB.getVal('admin_client_phone','')||'').replace(/\D/g,'');
+  const encoded = encodeURIComponent(msg);
+  window.open(phone ? `https://wa.me/${phone}?text=${encoded}` : `https://wa.me/?text=${encoded}`, '_blank');
+}
+
+document.querySelectorAll('.modal-wrap').forEach(m=>{
+  m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');});
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape') document.querySelectorAll('.modal-wrap.open').forEach(m=>m.classList.remove('open'));
+});
+</script>
+</body>
+</html>

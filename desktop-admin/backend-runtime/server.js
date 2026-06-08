@@ -51447,11 +51447,19 @@ var require_jsonwebtoken = __commonJS({
 var require_auth = __commonJS({
   "../backend/src/middleware/auth.js"(exports2, module2) {
     var jwt = require_jsonwebtoken();
+    var crypto = require("crypto");
+    var hashDeviceId = (value) => crypto.createHash("sha256").update(String(value || "").trim()).digest("hex");
     var verifyToken = (req, res, next) => {
       const token = req.headers["authorization"]?.split(" ")[1];
       if (!token) return res.status(401).json({ message: "Token manquant" });
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        if (decoded.role === "client" && decoded.device_hash) {
+          const deviceId = req.headers["x-device-id"];
+          if (!deviceId || hashDeviceId(deviceId) !== decoded.device_hash) {
+            return res.status(401).json({ message: "Appareil non autorise pour ce compte client" });
+          }
+        }
         req.user = decoded;
         next();
       } catch {
@@ -53293,11 +53301,64 @@ var require_authController = __commonJS({
   "../backend/src/controllers/authController.js"(exports2) {
     var bcrypt = require_bcryptjs();
     var jwt = require_jsonwebtoken();
+    var crypto = require("crypto");
     var db2 = require_db2();
     var getErrorMessage = (err) => err?.message || err?.code || err?.name || String(err) || "Erreur inconnue";
     var generateClientId = () => {
       const num = Math.floor(1e4 + Math.random() * 9e4);
       return `CLI-${num}`;
+    };
+    var clientDevicesReady = false;
+    var hashDeviceId = (value) => crypto.createHash("sha256").update(String(value || "").trim()).digest("hex");
+    var ensureClientDevicesTable = async () => {
+      if (clientDevicesReady) return;
+      if (db2.type === "postgres") {
+        await db2.query(
+          `CREATE TABLE IF NOT EXISTS client_devices (
+        id SERIAL PRIMARY KEY,
+        client_id INTEGER NOT NULL,
+        device_hash VARCHAR(128) NOT NULL UNIQUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`
+        );
+      } else {
+        await db2.query(
+          `CREATE TABLE IF NOT EXISTS client_devices (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        client_id INT NOT NULL,
+        device_hash VARCHAR(128) NOT NULL UNIQUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+      )`
+        );
+      }
+      clientDevicesReady = true;
+    };
+    var enregistrerDeviceClient = async (clientId, deviceId) => {
+      await ensureClientDevicesTable();
+      const deviceHash = hashDeviceId(deviceId);
+      if (!deviceHash) throw new Error("Device ID manquant");
+      const [existing] = await db2.query(
+        "SELECT id FROM client_devices WHERE client_id = ? AND device_hash = ?",
+        [clientId, deviceHash]
+      );
+      if (existing.length) {
+        await db2.query("UPDATE client_devices SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?", [existing[0].id]);
+        return deviceHash;
+      }
+      const [[row]] = await db2.query("SELECT COUNT(*) AS total FROM client_devices WHERE client_id = ?", [clientId]);
+      if ((Number(row.total) || 0) >= 2) {
+        const err = new Error("Limite atteinte: ce compte client est deja active sur 2 telephones.");
+        err.statusCode = 403;
+        throw err;
+      }
+      await db2.query(
+        "INSERT INTO client_devices (client_id, device_hash) VALUES (?, ?)",
+        [clientId, deviceHash]
+      );
+      return deviceHash;
     };
     exports2.adminLogin = async (req, res) => {
       try {
@@ -53366,7 +53427,10 @@ var require_authController = __commonJS({
     };
     exports2.clientLogin = async (req, res) => {
       try {
-        const { id_client, password } = req.body;
+        const { id_client, password, device_id } = req.body;
+        if (!device_id || !String(device_id).trim()) {
+          return res.status(400).json({ message: "Identification appareil obligatoire" });
+        }
         const [rows] = await db2.query("SELECT * FROM clients WHERE id_client = ?", [id_client]);
         if (!rows.length) return res.status(404).json({ message: "ID Client introuvable" });
         const client = rows[0];
@@ -53376,8 +53440,9 @@ var require_authController = __commonJS({
           return res.status(403).json({ message: "Compte suspendu" });
         const valid = await bcrypt.compare(password, client.password);
         if (!valid) return res.status(401).json({ message: "Mot de passe incorrect" });
+        const device_hash = await enregistrerDeviceClient(client.id, device_id);
         const token = jwt.sign(
-          { id: client.id, role: "client", email: client.email, id_client: client.id_client },
+          { id: client.id, role: "client", email: client.email, id_client: client.id_client, device_hash },
           process.env.JWT_SECRET,
           { expiresIn: process.env.JWT_EXPIRES_IN }
         );
@@ -53386,7 +53451,7 @@ var require_authController = __commonJS({
           user: { id: client.id, id_client: client.id_client, nom: client.nom, prenom: client.prenom, email: client.email, role: "client" }
         });
       } catch (err) {
-        res.status(500).json({ message: "Erreur serveur", error: getErrorMessage(err) });
+        res.status(err.statusCode || 500).json({ message: err.statusCode ? err.message : "Erreur serveur", error: getErrorMessage(err) });
       }
     };
   }
@@ -53829,8 +53894,16 @@ Note : ${notes_admin}` : ""}`
     };
     exports2.getMesRdv = async (req, res) => {
       try {
+        await ensureMessagesTable();
         const [rows] = await db2.query(
-          `SELECT r.*, v.marque, v.modele, v.immatriculation
+          `SELECT r.*, v.marque, v.modele, v.immatriculation,
+              (
+                SELECT COUNT(*) FROM rendezvous_messages rm
+                WHERE rm.rendezvous_id = r.id
+                  AND rm.client_id = r.client_id
+                  AND rm.expediteur <> 'client'
+                  AND rm.lu_client = FALSE
+              ) AS unread_count
        FROM rendezvous r JOIN vehicules v ON r.vehicule_id = v.id
        WHERE r.client_id = ? ORDER BY r.date_rdv DESC`,
           [req.user.id]
@@ -53842,8 +53915,15 @@ Note : ${notes_admin}` : ""}`
     };
     exports2.getAllRdv = async (req, res) => {
       try {
+        await ensureMessagesTable();
         const [rows] = await db2.query(
-          `SELECT r.*, c.nom, c.prenom, c.id_client, v.marque, v.modele, v.immatriculation
+          `SELECT r.*, c.nom, c.prenom, c.id_client, v.marque, v.modele, v.immatriculation,
+              (
+                SELECT COUNT(*) FROM rendezvous_messages rm
+                WHERE rm.rendezvous_id = r.id
+                  AND rm.expediteur = 'client'
+                  AND rm.lu_admin = FALSE
+              ) AS unread_count
        FROM rendezvous r
        JOIN clients c ON r.client_id = c.id
        JOIN vehicules v ON r.vehicule_id = v.id
@@ -53975,6 +54055,10 @@ Message admin : ${notes_admin}` : ""}`
         const { id } = req.params;
         const [[rdv]] = await db2.query("SELECT id FROM rendezvous WHERE id = ? AND client_id = ?", [id, req.user.id]);
         if (!rdv) return res.status(404).json({ message: "Rendez-vous introuvable" });
+        await db2.query(
+          "UPDATE rendezvous_messages SET lu_client = TRUE WHERE rendezvous_id = ? AND client_id = ? AND expediteur <> 'client'",
+          [id, req.user.id]
+        );
         const [rows] = await db2.query(
           "SELECT * FROM rendezvous_messages WHERE rendezvous_id = ? AND client_id = ? ORDER BY created_at ASC, id ASC",
           [id, req.user.id]
@@ -54052,6 +54136,23 @@ Message admin : ${notes_admin}` : ""}`
           [req.user.id]
         );
         res.json({ message: "Notifications lues" });
+      } catch (err) {
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+      }
+    };
+    exports2.getRdvNotificationsStatsAdmin = async (req, res) => {
+      try {
+        await ensureMessagesTable();
+        const [[row]] = await db2.query(
+          `SELECT COUNT(*) AS non_lues, MAX(id) AS notification_version, MAX(created_at) AS derniere_notification
+       FROM rendezvous_messages
+       WHERE expediteur = 'client' AND lu_admin = FALSE`
+        );
+        res.json({
+          non_lues: Number(row.non_lues) || 0,
+          notification_version: Number(row.notification_version) || 0,
+          derniere_notification: row.derniere_notification || null
+        });
       } catch (err) {
         res.status(500).json({ message: "Erreur serveur", error: err.message });
       }
@@ -54225,17 +54326,17 @@ var require_factureController = __commonJS({
   "../backend/src/controllers/factureController.js"(exports2) {
     var db2 = require_db2();
     var { envoyerWhatsAppClient } = require_whatsappService();
-    var getAccesFactureClient = (id) => {
-      const clientUrl = String(process.env.APP_CLIENT_URL || "").trim().replace(/\/$/, "");
-      const urlUtilisable = clientUrl && /^https?:\/\//i.test(clientUrl) && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(clientUrl);
-      return urlUtilisable ? `Facture num\xE9rique : ${clientUrl}/documents/facture/${id}/imprimer` : "Facture num\xE9rique disponible dans l\u2019application client DiagAuto Mada.";
-    };
     var genNumero = (prefix) => {
       const date = /* @__PURE__ */ new Date();
       const annee = date.getFullYear();
       const mois = String(date.getMonth() + 1).padStart(2, "0");
       const rand = Math.floor(1e3 + Math.random() * 9e3);
       return `${prefix}-${annee}${mois}-${rand}`;
+    };
+    var getAccesFactureClientComplet = (id) => {
+      const clientUrl = String(process.env.APP_CLIENT_URL || "").trim().replace(/\/$/, "");
+      const urlUtilisable = clientUrl && /^https?:\/\//i.test(clientUrl) && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(clientUrl);
+      return urlUtilisable ? `Lien facture numerique : ${clientUrl}/documents/facture/${id}/imprimer` : "Facture numerique jointe dans l application client DiagAuto Mada : ouvrez Documents > Factures > Voir / Imprimer.";
     };
     exports2.creerDevis = async (req, res) => {
       try {
@@ -54460,7 +54561,7 @@ Total : ${Number(f.montant_ttc).toLocaleString("fr-FR")} Ar
 Deja paye : ${Number(f.montant_paye || 0).toLocaleString("fr-FR")} Ar
 Reste : ${Math.max(0, reste).toLocaleString("fr-FR")} Ar
 Statut : ${String(f.statut || "").replaceAll("_", " ")}
-${getAccesFactureClient(id)}`
+${getAccesFactureClientComplet(id)}`
         });
         res.json({ message: "Facture prete a envoyer", whatsapp });
       } catch (err) {
@@ -54484,12 +54585,12 @@ ${getAccesFactureClient(id)}`
           clientId: f.client_id,
           type: "facture_paiement",
           message: `DiagAuto Mada
-Paiement facture valid\xE9.
+Paiement facture valide.
 Facture : ${f.numero_facture}
-V\xE9hicule : ${f.marque} ${f.modele} (${f.immatriculation})
-Montant pay\xE9 : ${Number(montant_paye).toLocaleString("fr-FR")} Ar
+Vehicule : ${f.marque} ${f.modele} (${f.immatriculation})
+Montant paye : ${Number(montant_paye).toLocaleString("fr-FR")} Ar
 Statut : ${statut.replaceAll("_", " ")}
-${getAccesFactureClient(id)}`
+${getAccesFactureClientComplet(id)}`
         });
         res.json({ message: "Paiement enregistr\xE9", statut, whatsapp });
       } catch (err) {
@@ -54522,6 +54623,14 @@ var require_dashboardController = __commonJS({
        FROM rendezvous r JOIN clients c ON r.client_id = c.id JOIN vehicules v ON r.vehicule_id = v.id
        ORDER BY r.created_at DESC LIMIT 5`
         );
+        const [interventions_recentes] = await db2.query(
+          `SELECT i.id, i.description, i.technicien, i.date_debut, i.date_fin, i.statut,
+              c.nom, c.prenom, v.marque, v.modele, v.immatriculation
+       FROM interventions i
+       JOIN clients c ON i.client_id = c.id
+       JOIN vehicules v ON i.vehicule_id = v.id
+       ORDER BY i.created_at DESC LIMIT 5`
+        );
         res.json({
           total_clients,
           clients_en_attente,
@@ -54530,7 +54639,8 @@ var require_dashboardController = __commonJS({
           interventions_en_cours,
           factures_non_payees,
           chiffre_affaires_mois: chiffre_affaires,
-          rdv_recents
+          rdv_recents,
+          interventions_recentes
         });
       } catch (err) {
         res.status(500).json({ message: "Erreur serveur", error: err.message });
@@ -54543,8 +54653,28 @@ var require_dashboardController = __commonJS({
 var require_interventionController = __commonJS({
   "../backend/src/controllers/interventionController.js"(exports2) {
     var db2 = require_db2();
+    var archiveColumnsReady = false;
+    var ensureArchiveColumns = async () => {
+      if (archiveColumnsReady) return;
+      const statements = db2.type === "postgres" ? [
+        "ALTER TABLE interventions ADD COLUMN IF NOT EXISTS dernier_kilometrage INTEGER",
+        "ALTER TABLE interventions ADD COLUMN IF NOT EXISTS numero_vehicule_archive VARCHAR(100)"
+      ] : [
+        "ALTER TABLE interventions ADD COLUMN IF NOT EXISTS dernier_kilometrage INT NULL",
+        "ALTER TABLE interventions ADD COLUMN IF NOT EXISTS numero_vehicule_archive VARCHAR(100) NULL"
+      ];
+      for (const sql of statements) {
+        try {
+          await db2.query(sql);
+        } catch (err) {
+          if (!/duplicate|exists/i.test(String(err.message))) throw err;
+        }
+      }
+      archiveColumnsReady = true;
+    };
     exports2.getAllInterventions = async (req, res) => {
       try {
+        await ensureArchiveColumns();
         const [rows] = await db2.query(
           `SELECT i.*, c.nom, c.prenom, c.id_client, v.marque, v.modele, v.immatriculation
        FROM interventions i
@@ -54559,7 +54689,8 @@ var require_interventionController = __commonJS({
     };
     exports2.creerIntervention = async (req, res) => {
       try {
-        const { rendezvous_id, client_id, vehicule_id, description, technicien, date_debut } = req.body;
+        await ensureArchiveColumns();
+        const { rendezvous_id, client_id, vehicule_id, description, technicien, date_debut, dernier_kilometrage, numero_vehicule_archive } = req.body;
         if (!client_id || !vehicule_id || !description || !String(description).trim()) {
           return res.status(400).json({ message: "Client, v\xE9hicule et r\xE9paration obligatoires" });
         }
@@ -54569,8 +54700,19 @@ var require_interventionController = __commonJS({
         );
         if (!vehicule) return res.status(404).json({ message: "V\xE9hicule introuvable pour ce client" });
         await db2.query(
-          "INSERT INTO interventions (rendezvous_id, client_id, vehicule_id, description, technicien, date_debut) VALUES (?, ?, ?, ?, ?, ?)",
-          [rendezvous_id || null, client_id, vehicule_id, description, technicien, date_debut]
+          `INSERT INTO interventions
+       (rendezvous_id, client_id, vehicule_id, description, technicien, date_debut, dernier_kilometrage, numero_vehicule_archive)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            rendezvous_id || null,
+            client_id,
+            vehicule_id,
+            description,
+            technicien,
+            date_debut,
+            dernier_kilometrage ? Number(dernier_kilometrage) : null,
+            numero_vehicule_archive || null
+          ]
         );
         res.status(201).json({ message: "Intervention cr\xE9\xE9e" });
       } catch (err) {
@@ -54590,7 +54732,9 @@ var require_interventionController = __commonJS({
     exports2.getMesInterventions = async (req, res) => {
       try {
         const [rows] = await db2.query(
-          `SELECT i.*, v.marque, v.modele, v.immatriculation
+          `SELECT i.id, i.rendezvous_id, i.client_id, i.vehicule_id, i.description, i.technicien,
+              i.date_debut, i.date_fin, i.statut, i.created_at,
+              v.marque, v.modele, v.immatriculation
        FROM interventions i JOIN vehicules v ON i.vehicule_id = v.id
        WHERE i.client_id = ? ORDER BY i.created_at DESC`,
           [req.user.id]
@@ -54886,6 +55030,7 @@ var require_systemController = __commonJS({
           "factures",
           "proformas",
           "devis",
+          "urgence_messages",
           "urgences_depannage",
           "notifications_whatsapp",
           "rendezvous_messages",
@@ -54938,7 +55083,7 @@ var require_systemController = __commonJS({
         resultats.lignes_factures = await deleteLines("facture", factures);
         resultats.lignes_devis = await deleteLines("devis", devis);
         resultats.lignes_proformas = await deleteLines("proforma", proformas);
-        for (const table of ["factures", "proformas", "devis", "urgences_depannage", "notifications_whatsapp", "rendezvous_messages", "interventions", "rendezvous", "vehicules"]) {
+        for (const table of ["factures", "proformas", "devis", "urgence_messages", "urgences_depannage", "notifications_whatsapp", "rendezvous_messages", "interventions", "rendezvous", "vehicules"]) {
           const [result] = await conn.query(`DELETE FROM ${table} WHERE client_id = ?`, [clientId]);
           resultats[table] = result.affectedRows;
         }
@@ -54961,7 +55106,25 @@ var require_systemController = __commonJS({
 var require_urgenceController = __commonJS({
   "../backend/src/controllers/urgenceController.js"(exports2) {
     var db2 = require_db2();
-    var { envoyerWhatsAppClient } = require_whatsappService();
+    var urgenceMessagesReady = false;
+    var urgenceColumnsReady = false;
+    var ensureUrgenceColumns = async () => {
+      if (urgenceColumnsReady) return;
+      const statements = db2.type === "postgres" ? [
+        "ALTER TABLE urgences_depannage ADD COLUMN IF NOT EXISTS numero_vehicule VARCHAR(100)"
+      ] : [
+        "ALTER TABLE urgences_depannage ADD COLUMN IF NOT EXISTS numero_vehicule VARCHAR(100) NULL",
+        "ALTER TABLE urgences_depannage MODIFY zone ENUM('route_nationale', 'province', 'antananarivo', 'hors_antananarivo', 'autre') DEFAULT 'route_nationale'"
+      ];
+      for (const sql of statements) {
+        try {
+          await db2.query(sql);
+        } catch (err) {
+          if (!/duplicate|exists|syntax/i.test(String(err.message))) throw err;
+        }
+      }
+      urgenceColumnsReady = true;
+    };
     var parseLocalisation = (value) => {
       try {
         const parsed = JSON.parse(value);
@@ -54983,12 +55146,81 @@ var require_urgenceController = __commonJS({
       ...urgence,
       gps: parseLocalisation(urgence.localisation)
     });
+    var ensureUrgenceMessagesTable = async () => {
+      if (urgenceMessagesReady) return;
+      if (db2.type === "postgres") {
+        await db2.query(
+          `CREATE TABLE IF NOT EXISTS urgence_messages (
+        id SERIAL PRIMARY KEY,
+        urgence_id INT NOT NULL REFERENCES urgences_depannage(id) ON DELETE CASCADE,
+        client_id INT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+        expediteur VARCHAR(20) NOT NULL,
+        message TEXT NOT NULL,
+        lu_client BOOLEAN DEFAULT FALSE,
+        lu_admin BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`
+        );
+      } else {
+        await db2.query(
+          `CREATE TABLE IF NOT EXISTS urgence_messages (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        urgence_id INT NOT NULL,
+        client_id INT NOT NULL,
+        expediteur VARCHAR(20) NOT NULL,
+        message TEXT NOT NULL,
+        lu_client BOOLEAN DEFAULT FALSE,
+        lu_admin BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (urgence_id) REFERENCES urgences_depannage(id) ON DELETE CASCADE,
+        FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+      )`
+        );
+      }
+      urgenceMessagesReady = true;
+    };
+    var getUrgenceForClient = async (id, clientId) => {
+      const [[urgence]] = await db2.query(
+        "SELECT * FROM urgences_depannage WHERE id = ? AND client_id = ?",
+        [id, clientId]
+      );
+      return urgence;
+    };
+    var getUrgenceForAdmin = async (id) => {
+      const [[urgence]] = await db2.query(
+        "SELECT * FROM urgences_depannage WHERE id = ?",
+        [id]
+      );
+      return urgence;
+    };
+    var ajouterMessageUrgence = async ({ urgenceId, clientId, expediteur, message }) => {
+      await ensureUrgenceMessagesTable();
+      await db2.query(
+        `INSERT INTO urgence_messages
+     (urgence_id, client_id, expediteur, message, lu_client, lu_admin)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          urgenceId,
+          clientId,
+          expediteur,
+          message,
+          expediteur === "client",
+          expediteur === "admin"
+        ]
+      );
+    };
     exports2.creerUrgence = async (req, res) => {
       try {
-        const { telephone, latitude, longitude, precision, zone, message } = req.body;
+        await ensureUrgenceColumns();
+        const { telephone, numero_vehicule, latitude, longitude, precision, zone, message } = req.body;
         if (!telephone || !String(telephone).trim()) {
-          return res.status(400).json({ message: "Num\xE9ro t\xE9l\xE9phone obligatoire" });
+          return res.status(400).json({ message: "Numero telephone obligatoire" });
         }
+        if (!numero_vehicule || !String(numero_vehicule).trim()) {
+          return res.status(400).json({ message: "Numero du vehicule obligatoire" });
+        }
+        const allowedZones = ["route_nationale", "province", "antananarivo", "hors_antananarivo"];
+        const zoneValue = allowedZones.includes(zone) ? zone : "route_nationale";
         const lat = Number(latitude);
         const lng = Number(longitude);
         const accuracy = Number(precision);
@@ -55004,17 +55236,18 @@ var require_urgenceController = __commonJS({
           precision: Number.isFinite(accuracy) ? Math.round(accuracy) : null
         });
         const [result] = await db2.query(
-          `INSERT INTO urgences_depannage (client_id, telephone, localisation, zone, message)
-       VALUES (?, ?, ?, ?, ?)`,
-          [req.user.id, telephone, localisation, zone || "route_nationale", message]
+          `INSERT INTO urgences_depannage (client_id, telephone, numero_vehicule, localisation, zone, message)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+          [req.user.id, telephone, numero_vehicule, localisation, zoneValue, message]
         );
-        res.status(201).json({ message: "Urgence envoy\xE9e", id: result.insertId });
+        res.status(201).json({ message: "Urgence envoyee", id: result.insertId });
       } catch (err) {
         res.status(500).json({ message: "Erreur serveur", error: err.message });
       }
     };
     exports2.getMesUrgences = async (req, res) => {
       try {
+        await ensureUrgenceColumns();
         const [rows] = await db2.query(
           `SELECT * FROM urgences_depannage
        WHERE client_id = ?
@@ -55029,6 +55262,7 @@ var require_urgenceController = __commonJS({
     };
     exports2.getMesNotificationsStats = async (req, res) => {
       try {
+        await ensureUrgenceMessagesTable();
         const [[row]] = await db2.query(
           `SELECT COUNT(*) AS non_lues, MAX(updated_at) AS derniere_notification,
               SUM(client_notification_version) AS notification_version
@@ -55036,10 +55270,16 @@ var require_urgenceController = __commonJS({
        WHERE client_id = ? AND client_notification_non_lue = TRUE`,
           [req.user.id]
         );
+        const [[messages]] = await db2.query(
+          `SELECT COUNT(*) AS messages_non_lus, MAX(created_at) AS derniere_message
+       FROM urgence_messages
+       WHERE client_id = ? AND expediteur = 'admin' AND lu_client = FALSE`,
+          [req.user.id]
+        );
         res.json({
-          non_lues: Number(row.non_lues) || 0,
-          derniere_notification: row.derniere_notification || null,
-          notification_version: Number(row.notification_version) || 0
+          non_lues: Number(row.non_lues) || Number(messages.messages_non_lus) || 0,
+          derniere_notification: messages.derniere_message || row.derniere_notification || null,
+          notification_version: Number(row.notification_version) || Number(messages.messages_non_lus) || 0
         });
       } catch (err) {
         res.status(500).json({ message: "Erreur serveur", error: err.message });
@@ -55047,8 +55287,13 @@ var require_urgenceController = __commonJS({
     };
     exports2.lireMesNotifications = async (req, res) => {
       try {
+        await ensureUrgenceMessagesTable();
         await db2.query(
           "UPDATE urgences_depannage SET client_notification_non_lue = FALSE WHERE client_id = ?",
+          [req.user.id]
+        );
+        await db2.query(
+          "UPDATE urgence_messages SET lu_client = TRUE WHERE client_id = ?",
           [req.user.id]
         );
         res.json({ message: "Notifications lues" });
@@ -55058,6 +55303,7 @@ var require_urgenceController = __commonJS({
     };
     exports2.getAllUrgences = async (req, res) => {
       try {
+        await ensureUrgenceColumns();
         const [rows] = await db2.query(
           `SELECT u.*, c.id_client, c.nom, c.prenom, c.email, c.telephone AS client_telephone
        FROM urgences_depannage u
@@ -55095,10 +55341,7 @@ var require_urgenceController = __commonJS({
         if (statut && !allowed.includes(statut)) {
           return res.status(400).json({ message: "Statut invalide" });
         }
-        const [[urgence]] = await db2.query(
-          "SELECT client_id, statut FROM urgences_depannage WHERE id = ?",
-          [id]
-        );
+        const urgence = await getUrgenceForAdmin(id);
         if (!urgence) return res.status(404).json({ message: "Urgence introuvable" });
         const reponse = reponse_admin && String(reponse_admin).trim();
         const notifierClient = Boolean(reponse) || Boolean(statut && statut !== urgence.statut);
@@ -55111,19 +55354,107 @@ var require_urgenceController = __commonJS({
        WHERE id = ?`,
           [reponse || null, statut || null, notifierClient, notifierClient, id]
         );
-        let whatsapp = null;
-        if (notifierClient) {
-          const detail = reponse ? `R\xE9ponse de l\u2019admin : ${reponse}` : `Statut de votre urgence : ${statut.replaceAll("_", " ")}`;
-          whatsapp = await envoyerWhatsAppClient({
+        if (reponse) {
+          await ajouterMessageUrgence({
+            urgenceId: id,
             clientId: urgence.client_id,
-            type: "urgence_reponse_admin",
-            message: `DiagAuto Mada
-Mise \xE0 jour de votre demande de d\xE9pannage urgence.
-${detail}
-Ouvrez l\u2019application Client pour voir le d\xE9tail.`
+            expediteur: "admin",
+            message: reponse
           });
         }
-        res.json({ message: "Urgence mise \xE0 jour", whatsapp });
+        res.json({ message: "Urgence mise a jour" });
+      } catch (err) {
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+      }
+    };
+    exports2.getMessagesUrgenceClient = async (req, res) => {
+      try {
+        await ensureUrgenceMessagesTable();
+        const urgence = await getUrgenceForClient(req.params.id, req.user.id);
+        if (!urgence) return res.status(404).json({ message: "Urgence introuvable" });
+        await db2.query(
+          "UPDATE urgence_messages SET lu_client = TRUE WHERE urgence_id = ? AND client_id = ?",
+          [req.params.id, req.user.id]
+        );
+        await db2.query(
+          "UPDATE urgences_depannage SET client_notification_non_lue = FALSE WHERE id = ? AND client_id = ?",
+          [req.params.id, req.user.id]
+        );
+        const [rows] = await db2.query(
+          `SELECT id, expediteur, message, lu_client, lu_admin, created_at
+       FROM urgence_messages
+       WHERE urgence_id = ? AND client_id = ?
+       ORDER BY created_at ASC, id ASC`,
+          [req.params.id, req.user.id]
+        );
+        res.json(rows);
+      } catch (err) {
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+      }
+    };
+    exports2.envoyerMessageUrgenceClient = async (req, res) => {
+      try {
+        const message = String(req.body.message || "").trim();
+        if (!message) return res.status(400).json({ message: "Message obligatoire" });
+        const urgence = await getUrgenceForClient(req.params.id, req.user.id);
+        if (!urgence) return res.status(404).json({ message: "Urgence introuvable" });
+        await ajouterMessageUrgence({
+          urgenceId: req.params.id,
+          clientId: req.user.id,
+          expediteur: "client",
+          message
+        });
+        if (urgence.statut === "nouveau") {
+          await db2.query("UPDATE urgences_depannage SET statut = ? WHERE id = ?", ["vu", req.params.id]);
+        }
+        res.status(201).json({ message: "Message envoye" });
+      } catch (err) {
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+      }
+    };
+    exports2.getMessagesUrgenceAdmin = async (req, res) => {
+      try {
+        await ensureUrgenceMessagesTable();
+        const urgence = await getUrgenceForAdmin(req.params.id);
+        if (!urgence) return res.status(404).json({ message: "Urgence introuvable" });
+        await db2.query(
+          "UPDATE urgence_messages SET lu_admin = TRUE WHERE urgence_id = ?",
+          [req.params.id]
+        );
+        const [rows] = await db2.query(
+          `SELECT id, expediteur, message, lu_client, lu_admin, created_at
+       FROM urgence_messages
+       WHERE urgence_id = ?
+       ORDER BY created_at ASC, id ASC`,
+          [req.params.id]
+        );
+        res.json(rows);
+      } catch (err) {
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+      }
+    };
+    exports2.envoyerMessageUrgenceAdmin = async (req, res) => {
+      try {
+        const message = String(req.body.message || "").trim();
+        if (!message) return res.status(400).json({ message: "Message obligatoire" });
+        const urgence = await getUrgenceForAdmin(req.params.id);
+        if (!urgence) return res.status(404).json({ message: "Urgence introuvable" });
+        await ajouterMessageUrgence({
+          urgenceId: req.params.id,
+          clientId: urgence.client_id,
+          expediteur: "admin",
+          message
+        });
+        await db2.query(
+          `UPDATE urgences_depannage
+       SET reponse_admin = ?,
+           statut = CASE WHEN statut = 'nouveau' THEN 'en_cours' ELSE statut END,
+           client_notification_non_lue = TRUE,
+           client_notification_version = client_notification_version + 1
+       WHERE id = ?`,
+          [message, req.params.id]
+        );
+        res.status(201).json({ message: "Message envoye" });
       } catch (err) {
         res.status(500).json({ message: "Erreur serveur", error: err.message });
       }
@@ -55160,6 +55491,7 @@ var require_routes = __commonJS({
     router.post("/admin/clients/:id/reset-password", verifyToken, isAdmin, clientCtrl.resetPasswordClient);
     router.get("/admin/rendezvous", verifyToken, isAdmin, rdvCtrl.getAllRdv);
     router.post("/admin/rendezvous", verifyToken, isAdmin, rdvCtrl.creerRdvAdmin);
+    router.get("/admin/rendezvous/notifications/stats", verifyToken, isAdmin, rdvCtrl.getRdvNotificationsStatsAdmin);
     router.get("/admin/rendezvous/:id/messages", verifyToken, isAdmin, rdvCtrl.getMessagesRdvAdmin);
     router.post("/admin/rendezvous/:id/messages", verifyToken, isAdmin, rdvCtrl.envoyerMessageRdvAdmin);
     router.put("/admin/rendezvous/:id/statut", verifyToken, isAdmin, rdvCtrl.changerStatutRdv);
@@ -55200,8 +55532,12 @@ var require_routes = __commonJS({
     router.get("/client/urgences", verifyToken, isClient, urgenceCtrl.getMesUrgences);
     router.get("/client/urgences/notifications/stats", verifyToken, isClient, urgenceCtrl.getMesNotificationsStats);
     router.put("/client/urgences/notifications/lire", verifyToken, isClient, urgenceCtrl.lireMesNotifications);
+    router.get("/client/urgences/:id/messages", verifyToken, isClient, urgenceCtrl.getMessagesUrgenceClient);
+    router.post("/client/urgences/:id/messages", verifyToken, isClient, urgenceCtrl.envoyerMessageUrgenceClient);
     router.get("/admin/urgences", verifyToken, isAdmin, urgenceCtrl.getAllUrgences);
     router.get("/admin/urgences/stats", verifyToken, isAdmin, urgenceCtrl.getUrgenceStats);
+    router.get("/admin/urgences/:id/messages", verifyToken, isAdmin, urgenceCtrl.getMessagesUrgenceAdmin);
+    router.post("/admin/urgences/:id/messages", verifyToken, isAdmin, urgenceCtrl.envoyerMessageUrgenceAdmin);
     router.put("/admin/urgences/:id", verifyToken, isAdmin, urgenceCtrl.repondreUrgence);
     router.get("/admin/atelier", verifyToken, isAdmin, atelierCtrl.getConfig);
     router.put("/admin/atelier", verifyToken, isAdmin, atelierCtrl.updateConfig);
@@ -55249,6 +55585,42 @@ var updateDirectory = updateDirectories.find((directory) => fs.existsSync(direct
 if (updateDirectory) {
   app.use("/updates", express.static(updateDirectory, { index: false, dotfiles: "deny" }));
 }
+var clientApkPath = path.join(__dirname, "public", "downloads", "DiagAuto-Client.apk");
+app.get("/download/client.apk", (req, res) => {
+  if (!fs.existsSync(clientApkPath)) {
+    res.status(404).send("APK client introuvable");
+    return;
+  }
+  res.download(clientApkPath, "DiagAuto-Client.apk");
+});
+app.get("/download/client", (req, res) => {
+  res.type("html").send(`<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DiagAuto Client - Installation</title>
+  <style>
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f3f6fa;color:#102033;font-family:Arial,sans-serif;padding:24px}
+    main{width:min(460px,100%);background:white;border:1px solid #dde4ef;border-radius:12px;padding:24px;box-shadow:0 16px 45px rgba(16,32,51,.12)}
+    .logo{width:64px;height:64px;border-radius:50%;background:#183f6c;color:white;display:grid;place-items:center;font-weight:800;margin:0 auto 14px}
+    h1{text-align:center;margin:0 0 8px;font-size:24px}
+    p{color:#667085;line-height:1.45}
+    a{display:block;text-align:center;background:#183f6c;color:white;text-decoration:none;font-weight:800;border-radius:10px;padding:14px 16px;margin:18px 0}
+    small{display:block;color:#667085;text-align:center}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="logo">DA</div>
+    <h1>DiagAuto Client</h1>
+    <p>Appuyez sur le bouton ci-dessous pour telecharger l'application client DiagAuto Mada.</p>
+    <a href="/download/client.apk">Telecharger l'APK</a>
+    <small>Sur Android, autorisez l'installation depuis le navigateur si le telephone le demande.</small>
+  </main>
+</body>
+</html>`);
+});
 app.use("/api", routes);
 app.get("/", (req, res) => res.json({ message: "DiagAuto Connect API is running" }));
 var PORT = process.env.PORT || 5e3;

@@ -1,0 +1,7 @@
+{
+  "appId": "mg.diagauto.fleettrack.admin",
+  "appName": "FleetTrack Admin",
+  "webDir": "../../web/dist-fleettrack-admin",
+  "server": { "androidScheme": "https" },
+  "android": { "allowMixedContent": true }
+}

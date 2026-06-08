@@ -1,0 +1,59 @@
+{
+  "name": "fleettrack-pro-client",
+  "version": "1.0.0",
+  "description": "FleetTrack Pro — Gestion Location Voiture",
+  "main": "main.js",
+  "author": "DiagAuto Mada",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis portable"
+  },
+  "build": {
+    "appId": "mg.fleettrack.client",
+    "productName": "FleetTrack Pro",
+    "copyright": "Copyright © 2024 DiagAuto Mada",
+    "files": [
+      "main.js",
+      "app.html",
+      "icon.png"
+    ],
+    "win": {
+      "icon": "icon.png",
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "FleetTrack Pro"
+    },
+    "portable": {
+      "artifactName": "FleetTrack-Pro-Portable-v1.0.exe"
+    },
+    "artifactName": "FleetTrack-Pro-Setup-v${version}-x64.${ext}",
+    "directories": {
+      "output": "dist"
+    }
+  },
+  "devDependencies": {
+    "electron": "^35.7.5",
+    "electron-builder": "^26.0.12",
+    "jimp": "^1.6.1"
+  }
+}
