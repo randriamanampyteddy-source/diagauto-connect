@@ -53689,10 +53689,172 @@ var require_clientController = __commonJS({
   }
 });
 
+// ../backend/src/services/whatsappService.js
+var require_whatsappService = __commonJS({
+  "../backend/src/services/whatsappService.js"(exports2) {
+    var db2 = require_db2();
+    var normalizeNumber = (value) => {
+      let number = String(value || "").replace(/\D/g, "");
+      if (number.startsWith("00")) number = number.slice(2);
+      if (number.startsWith("0")) number = `261${number.slice(1)}`;
+      if (number.length < 8 || number.length > 15) return "";
+      return number;
+    };
+    var buildManualWhatsApp = (destinataire, message, erreur) => ({
+      statut: "manuel",
+      mode: "manuel",
+      destinataire,
+      erreur,
+      lien_whatsapp: `https://wa.me/${destinataire}?text=${encodeURIComponent(message)}`,
+      lien_app: `whatsapp://send?phone=${destinataire}&text=${encodeURIComponent(message)}`
+    });
+    var logNotification = async ({ clientId, type, destinataire, message, statut, erreur = null }) => {
+      try {
+        await db2.query(
+          `INSERT INTO notifications_whatsapp (client_id, type, destinataire, message, statut, erreur)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+          [clientId, type, destinataire || null, message, statut, erreur]
+        );
+      } catch (err) {
+        console.error("Impossible de journaliser la notification WhatsApp:", err.message);
+      }
+    };
+    var getConfiguration = () => {
+      const token = String(process.env.WHATSAPP_API_TOKEN || "").trim();
+      const phoneNumberId = String(process.env.WHATSAPP_PHONE_NUMBER_ID || "").trim();
+      const graphVersion = String(process.env.WHATSAPP_GRAPH_VERSION || "v21.0").trim();
+      const clientUrl = String(process.env.APP_CLIENT_URL || "").trim().replace(/\/$/, "");
+      const clientUrlUtilisable = Boolean(
+        clientUrl && /^https?:\/\//i.test(clientUrl) && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(clientUrl)
+      );
+      return {
+        token,
+        phoneNumberId,
+        graphVersion,
+        clientUrl,
+        clientUrlUtilisable,
+        configure: Boolean(token && phoneNumberId)
+      };
+    };
+    var fetchAvecTimeout = async (url, options = {}) => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15e3);
+      try {
+        return await fetch(url, { ...options, signal: controller.signal });
+      } finally {
+        clearTimeout(timeout);
+      }
+    };
+    exports2.getConfigurationWhatsApp = () => {
+      const config = getConfiguration();
+      return {
+        configure: config.configure,
+        graph_version: config.graphVersion,
+        phone_number_id_present: Boolean(config.phoneNumberId),
+        api_token_present: Boolean(config.token),
+        phone_number_id_masque: config.phoneNumberId ? `${config.phoneNumberId.slice(0, 4)}...${config.phoneNumberId.slice(-4)}` : null,
+        app_client_url: config.clientUrl || null,
+        app_client_url_utilisable: config.clientUrlUtilisable
+      };
+    };
+    exports2.verifierConfigurationWhatsApp = async () => {
+      const config = getConfiguration();
+      if (!config.configure) {
+        return {
+          valide: false,
+          statut: "configuration_manquante",
+          message: "WHATSAPP_PHONE_NUMBER_ID et WHATSAPP_API_TOKEN sont obligatoires."
+        };
+      }
+      try {
+        const response = await fetchAvecTimeout(
+          `https://graph.facebook.com/${config.graphVersion}/${encodeURIComponent(config.phoneNumberId)}?fields=display_phone_number,verified_name,quality_rating`,
+          { headers: { Authorization: `Bearer ${config.token}` } }
+        );
+        const data = await response.json();
+        if (!response.ok) {
+          return {
+            valide: false,
+            statut: "echec",
+            message: data?.error?.message || `WhatsApp HTTP ${response.status}`,
+            code: data?.error?.code || response.status
+          };
+        }
+        return {
+          valide: true,
+          statut: "configure",
+          message: "Connexion WhatsApp Cloud API valide.",
+          compte: {
+            numero: data.display_phone_number || null,
+            nom_verifie: data.verified_name || null,
+            qualite: data.quality_rating || null
+          }
+        };
+      } catch (err) {
+        return {
+          valide: false,
+          statut: "echec",
+          message: err.name === "AbortError" ? "D\xE9lai de connexion WhatsApp d\xE9pass\xE9." : err.message
+        };
+      }
+    };
+    exports2.envoyerWhatsAppClient = async ({ clientId, type, message }) => {
+      let destinataire = null;
+      try {
+        const [[client]] = await db2.query(
+          "SELECT whatsapp, telephone FROM clients WHERE id = ?",
+          [clientId]
+        );
+        if (!client) {
+          return { statut: "echec", erreur: "Client introuvable." };
+        }
+        destinataire = normalizeNumber(client.whatsapp || client.telephone);
+        if (!destinataire) {
+          const erreur = "Num\xE9ro WhatsApp ou t\xE9l\xE9phone manquant/invalide.";
+          await logNotification({ clientId, type, destinataire, message, statut: "numero_manquant", erreur });
+          return { statut: "numero_manquant", erreur };
+        }
+        const config = getConfiguration();
+        if (!config.configure) {
+          const erreur = "WhatsApp automatique non configure. Envoi manuel disponible.";
+          await logNotification({ clientId, type, destinataire, message, statut: "configuration_manquante", erreur });
+          return buildManualWhatsApp(destinataire, message, erreur);
+        }
+        const response = await fetchAvecTimeout(`https://graph.facebook.com/${config.graphVersion}/${config.phoneNumberId}/messages`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${config.token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            to: destinataire,
+            type: "text",
+            text: { preview_url: true, body: message }
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data?.error?.message || `WhatsApp HTTP ${response.status}`);
+        await logNotification({ clientId, type, destinataire, message, statut: "envoye" });
+        return { statut: "envoye", message_id: data?.messages?.[0]?.id };
+      } catch (err) {
+        const erreur = err.name === "AbortError" ? "D\xE9lai d\u2019envoi WhatsApp d\xE9pass\xE9." : err.message;
+        await logNotification({ clientId, type, destinataire, message, statut: "echec", erreur });
+        if (destinataire) {
+          return buildManualWhatsApp(destinataire, message, erreur);
+        }
+        return { statut: "echec", erreur };
+      }
+    };
+  }
+});
+
 // ../backend/src/controllers/rendezvousController.js
 var require_rendezvousController = __commonJS({
   "../backend/src/controllers/rendezvousController.js"(exports2) {
     var db2 = require_db2();
+    var { envoyerWhatsAppClient } = require_whatsappService();
     var MAX_PAR_JOUR = 2;
     var messagesTableReady = false;
     var addDays = (date, days) => {
@@ -53775,6 +53937,19 @@ var require_rendezvousController = __commonJS({
           expediteur !== "client"
         ]
       );
+    };
+    var getMessageWhatsAppRdv = (rdv) => {
+      const note = rdv.notes_admin ? `
+Message admin : ${rdv.notes_admin}` : "";
+      const motif = rdv.motif ? `
+Motif : ${rdv.motif}` : "";
+      return `DiagAuto Mada
+Rendez-vous atelier.
+Client : ${rdv.prenom || ""} ${rdv.nom || ""}
+Date : ${formatDate(rdv.date_rdv)}
+Heure : ${String(rdv.heure_rdv).slice(0, 5)}
+Vehicule : ${rdv.marque} ${rdv.modele} (${rdv.immatriculation})
+Statut : ${statusLabels[rdv.statut] || rdv.statut}${motif}${note}`;
     };
     exports2.creerRdvAdmin = async (req, res) => {
       const conn = await db2.getConnection();
@@ -54049,6 +54224,29 @@ Message admin : ${notes_admin}` : ""}`
         res.status(500).json({ message: "Erreur serveur", error: err.message });
       }
     };
+    exports2.envoyerRdvWhatsApp = async (req, res) => {
+      try {
+        const { id } = req.params;
+        const [[rdv]] = await db2.query(
+          `SELECT r.client_id, r.date_rdv, r.heure_rdv, r.motif, r.statut, r.notes_admin,
+              c.nom, c.prenom, v.marque, v.modele, v.immatriculation
+       FROM rendezvous r
+       JOIN clients c ON r.client_id = c.id
+       JOIN vehicules v ON r.vehicule_id = v.id
+       WHERE r.id = ?`,
+          [id]
+        );
+        if (!rdv) return res.status(404).json({ message: "Rendez-vous introuvable" });
+        const whatsapp = await envoyerWhatsAppClient({
+          clientId: rdv.client_id,
+          type: "rendezvous_envoi",
+          message: getMessageWhatsAppRdv(rdv)
+        });
+        res.json({ message: "Rendez-vous pret a envoyer", whatsapp });
+      } catch (err) {
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+      }
+    };
     exports2.getMessagesRdvClient = async (req, res) => {
       try {
         await ensureMessagesTable();
@@ -54160,172 +54358,199 @@ Message admin : ${notes_admin}` : ""}`
   }
 });
 
-// ../backend/src/services/whatsappService.js
-var require_whatsappService = __commonJS({
-  "../backend/src/services/whatsappService.js"(exports2) {
-    var db2 = require_db2();
-    var normalizeNumber = (value) => {
-      let number = String(value || "").replace(/\D/g, "");
-      if (number.startsWith("00")) number = number.slice(2);
-      if (number.startsWith("0")) number = `261${number.slice(1)}`;
-      if (number.length < 8 || number.length > 15) return "";
-      return number;
-    };
-    var buildManualWhatsApp = (destinataire, message, erreur) => ({
-      statut: "manuel",
-      mode: "manuel",
-      destinataire,
-      erreur,
-      lien_whatsapp: `https://wa.me/${destinataire}?text=${encodeURIComponent(message)}`,
-      lien_app: `whatsapp://send?phone=${destinataire}&text=${encodeURIComponent(message)}`
-    });
-    var logNotification = async ({ clientId, type, destinataire, message, statut, erreur = null }) => {
-      try {
-        await db2.query(
-          `INSERT INTO notifications_whatsapp (client_id, type, destinataire, message, statut, erreur)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-          [clientId, type, destinataire || null, message, statut, erreur]
-        );
-      } catch (err) {
-        console.error("Impossible de journaliser la notification WhatsApp:", err.message);
-      }
-    };
-    var getConfiguration = () => {
-      const token = String(process.env.WHATSAPP_API_TOKEN || "").trim();
-      const phoneNumberId = String(process.env.WHATSAPP_PHONE_NUMBER_ID || "").trim();
-      const graphVersion = String(process.env.WHATSAPP_GRAPH_VERSION || "v21.0").trim();
-      const clientUrl = String(process.env.APP_CLIENT_URL || "").trim().replace(/\/$/, "");
-      const clientUrlUtilisable = Boolean(
-        clientUrl && /^https?:\/\//i.test(clientUrl) && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(clientUrl)
-      );
-      return {
-        token,
-        phoneNumberId,
-        graphVersion,
-        clientUrl,
-        clientUrlUtilisable,
-        configure: Boolean(token && phoneNumberId)
-      };
-    };
-    var fetchAvecTimeout = async (url, options = {}) => {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15e3);
-      try {
-        return await fetch(url, { ...options, signal: controller.signal });
-      } finally {
-        clearTimeout(timeout);
-      }
-    };
-    exports2.getConfigurationWhatsApp = () => {
-      const config = getConfiguration();
-      return {
-        configure: config.configure,
-        graph_version: config.graphVersion,
-        phone_number_id_present: Boolean(config.phoneNumberId),
-        api_token_present: Boolean(config.token),
-        phone_number_id_masque: config.phoneNumberId ? `${config.phoneNumberId.slice(0, 4)}...${config.phoneNumberId.slice(-4)}` : null,
-        app_client_url: config.clientUrl || null,
-        app_client_url_utilisable: config.clientUrlUtilisable
-      };
-    };
-    exports2.verifierConfigurationWhatsApp = async () => {
-      const config = getConfiguration();
-      if (!config.configure) {
-        return {
-          valide: false,
-          statut: "configuration_manquante",
-          message: "WHATSAPP_PHONE_NUMBER_ID et WHATSAPP_API_TOKEN sont obligatoires."
-        };
-      }
-      try {
-        const response = await fetchAvecTimeout(
-          `https://graph.facebook.com/${config.graphVersion}/${encodeURIComponent(config.phoneNumberId)}?fields=display_phone_number,verified_name,quality_rating`,
-          { headers: { Authorization: `Bearer ${config.token}` } }
-        );
-        const data = await response.json();
-        if (!response.ok) {
-          return {
-            valide: false,
-            statut: "echec",
-            message: data?.error?.message || `WhatsApp HTTP ${response.status}`,
-            code: data?.error?.code || response.status
-          };
-        }
-        return {
-          valide: true,
-          statut: "configure",
-          message: "Connexion WhatsApp Cloud API valide.",
-          compte: {
-            numero: data.display_phone_number || null,
-            nom_verifie: data.verified_name || null,
-            qualite: data.quality_rating || null
-          }
-        };
-      } catch (err) {
-        return {
-          valide: false,
-          statut: "echec",
-          message: err.name === "AbortError" ? "D\xE9lai de connexion WhatsApp d\xE9pass\xE9." : err.message
-        };
-      }
-    };
-    exports2.envoyerWhatsAppClient = async ({ clientId, type, message }) => {
-      let destinataire = null;
-      try {
-        const [[client]] = await db2.query(
-          "SELECT whatsapp, telephone FROM clients WHERE id = ?",
-          [clientId]
-        );
-        if (!client) {
-          return { statut: "echec", erreur: "Client introuvable." };
-        }
-        destinataire = normalizeNumber(client.whatsapp || client.telephone);
-        if (!destinataire) {
-          const erreur = "Num\xE9ro WhatsApp ou t\xE9l\xE9phone manquant/invalide.";
-          await logNotification({ clientId, type, destinataire, message, statut: "numero_manquant", erreur });
-          return { statut: "numero_manquant", erreur };
-        }
-        const config = getConfiguration();
-        if (!config.configure) {
-          const erreur = "WhatsApp automatique non configure. Envoi manuel disponible.";
-          await logNotification({ clientId, type, destinataire, message, statut: "configuration_manquante", erreur });
-          return buildManualWhatsApp(destinataire, message, erreur);
-        }
-        const response = await fetchAvecTimeout(`https://graph.facebook.com/${config.graphVersion}/${config.phoneNumberId}/messages`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${config.token}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            messaging_product: "whatsapp",
-            recipient_type: "individual",
-            to: destinataire,
-            type: "text",
-            text: { preview_url: true, body: message }
-          })
-        });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data?.error?.message || `WhatsApp HTTP ${response.status}`);
-        await logNotification({ clientId, type, destinataire, message, statut: "envoye" });
-        return { statut: "envoye", message_id: data?.messages?.[0]?.id };
-      } catch (err) {
-        const erreur = err.name === "AbortError" ? "D\xE9lai d\u2019envoi WhatsApp d\xE9pass\xE9." : err.message;
-        await logNotification({ clientId, type, destinataire, message, statut: "echec", erreur });
-        if (destinataire) {
-          return buildManualWhatsApp(destinataire, message, erreur);
-        }
-        return { statut: "echec", erreur };
-      }
-    };
-  }
-});
-
 // ../backend/src/controllers/factureController.js
 var require_factureController = __commonJS({
   "../backend/src/controllers/factureController.js"(exports2) {
     var db2 = require_db2();
+    var os = require("os");
+    var crypto = require("crypto");
     var { envoyerWhatsAppClient } = require_whatsappService();
+    var _tokensPublics = /* @__PURE__ */ new Map();
+    var _getLocalIp = () => {
+      for (const ifaces of Object.values(os.networkInterfaces())) {
+        for (const iface of ifaces) {
+          if (iface.family === "IPv4" && !iface.internal) return iface.address;
+        }
+      }
+      return "127.0.0.1";
+    };
+    var _genTokenPublic = (type, id) => {
+      const token = crypto.randomBytes(18).toString("hex");
+      const expires = Date.now() + 72 * 60 * 60 * 1e3;
+      _tokensPublics.set(token, { type, id: String(id), expires });
+      if (_tokensPublics.size > 500) {
+        const now = Date.now();
+        for (const [k, v] of _tokensPublics) if (v.expires < now) _tokensPublics.delete(k);
+      }
+      return token;
+    };
+    var _getLienPublic = (type, id) => {
+      const clientUrl = String(process.env.APP_CLIENT_URL || "").trim().replace(/\/$/, "");
+      const urlUtilisable = clientUrl && /^https?:\/\//i.test(clientUrl) && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(clientUrl);
+      if (urlUtilisable) return `${clientUrl}/documents/${type}/${id}/imprimer`;
+      const port = process.env.PORT || 3e3;
+      const ip = _getLocalIp();
+      const token = _genTokenPublic(type, id);
+      return `http://${ip}:${port}/public/documents/${token}`;
+    };
+    var _htmlDocument = (doc, lignes, atelier) => {
+      const typeLabels = { facture: "FACTURE", devis: "DEVIS", proforma: "PROFORMA" };
+      const prefixes = { facture: "numero_facture", devis: "numero_devis", proforma: "numero_proforma" };
+      const dateFields = { facture: "date_facture", devis: "date_devis", proforma: "date_proforma" };
+      const tLabel = typeLabels[doc._type] || doc._type.toUpperCase();
+      const numero = doc[prefixes[doc._type]] || "\u2014";
+      const date = doc[dateFields[doc._type]] ? (/* @__PURE__ */ new Date(`${String(doc[dateFields[doc._type]]).slice(0, 10)}T12:00:00`)).toLocaleDateString("fr-FR") : "\u2014";
+      const validite = doc.date_validite ? `<tr><td>Validit\xE9</td><td>${(/* @__PURE__ */ new Date(`${String(doc.date_validite).slice(0, 10)}T12:00:00`)).toLocaleDateString("fr-FR")}</td></tr>` : "";
+      const echeance = doc.date_echeance ? `<tr><td>\xC9ch\xE9ance</td><td>${(/* @__PURE__ */ new Date(`${String(doc.date_echeance).slice(0, 10)}T12:00:00`)).toLocaleDateString("fr-FR")}</td></tr>` : "";
+      const fmt = (n) => `${Number(n || 0).toLocaleString("fr-FR")} Ar`;
+      const montantHT = Number(doc.montant_ht || 0);
+      const tva = Number(doc.tva || 0);
+      const montantTTC = Number(doc.montant_ttc || 0);
+      const montantPaye = Number(doc.montant_paye || 0);
+      const reste = Math.max(0, montantTTC - montantPaye);
+      const lignesHtml = lignes.map((l) => `
+    <tr>
+      <td style="padding:7px 10px;border-bottom:1px solid #e8eef8">${l.description || ""}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #e8eef8;text-align:center">${l.quantite}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #e8eef8;text-align:right">${fmt(l.prix_unitaire)}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #e8eef8;text-align:right;font-weight:600">${fmt(l.montant)}</td>
+    </tr>`).join("");
+      const paiementSection = doc._type === "facture" ? `
+    <tr><td style="padding:5px 10px;text-align:right;color:#555">D\xE9j\xE0 pay\xE9 :</td><td style="padding:5px 10px;text-align:right;color:#2e7d32;font-weight:700">${fmt(montantPaye)}</td></tr>
+    <tr style="background:#fff3e0"><td style="padding:7px 10px;text-align:right;font-weight:800;color:#e65100">Reste \xE0 payer :</td><td style="padding:7px 10px;text-align:right;font-weight:800;color:#e65100;font-size:1.05rem">${fmt(reste)}</td></tr>` : "";
+      const atelierNom = atelier?.nom || "DiagAuto Mada";
+      const atelierAddr = atelier?.adresse ? `<div style="font-size:11px;color:#666">${atelier.adresse}</div>` : "";
+      const atelierTel = atelier?.telephone ? `<div style="font-size:11px;color:#666">T\xE9l: ${atelier.telephone}</div>` : "";
+      const atelierNif = atelier?.nif ? `<div style="font-size:11px;color:#888">NIF: ${atelier.nif}</div>` : "";
+      const statutColors = { brouillon: "#78909c", envoye: "#1565c0", accepte: "#2e7d32", refuse: "#c62828", payee: "#1b5e20", partiellement_payee: "#e65100", non_payee: "#c62828" };
+      const statut = String(doc.statut || "").replaceAll("_", " ");
+      const statutColor = statutColors[doc.statut] || "#555";
+      return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${tLabel} ${numero}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#f4f7fb;padding:16px;color:#1a1a2e}
+  .card{background:#fff;border-radius:14px;padding:20px;max-width:600px;margin:0 auto;box-shadow:0 2px 18px rgba(0,0,0,.1)}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;padding-bottom:14px;border-bottom:2px solid #e3f2fd}
+  .atelier-name{font-size:1.1rem;font-weight:800;color:#1565c0}
+  .doc-title{font-size:1.4rem;font-weight:900;color:#0d2137;text-align:right}
+  .doc-num{font-size:.85rem;color:#64748b;text-align:right}
+  table{width:100%;border-collapse:collapse}
+  .info-table td{padding:4px 0;font-size:.88rem;vertical-align:top}
+  .info-table td:first-child{color:#64748b;width:110px}
+  .info-table td:last-child{font-weight:600}
+  .lines-table th{background:#1565c0;color:#fff;padding:7px 10px;text-align:left;font-size:.78rem;text-transform:uppercase}
+  .totaux-table td{padding:5px 10px;text-align:right;font-size:.9rem}
+  .statut-badge{display:inline-block;padding:3px 12px;border-radius:12px;font-size:.78rem;font-weight:700;background:#e8eef8;color:${statutColor};border:1px solid currentColor}
+  .notes{background:#f8fafc;border-left:3px solid #90caf9;border-radius:0 8px 8px 0;padding:8px 12px;font-size:.83rem;color:#445;margin-top:10px}
+  .footer{text-align:center;font-size:.7rem;color:#999;margin-top:14px;padding-top:10px;border-top:1px solid #e8eef8}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="header">
+    <div>
+      <div class="atelier-name">${atelierNom}</div>
+      ${atelierAddr}${atelierTel}${atelierNif}
+    </div>
+    <div>
+      <div class="doc-title">${tLabel}</div>
+      <div class="doc-num">${numero}</div>
+      <div style="margin-top:5px"><span class="statut-badge">${statut}</span></div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+    <div>
+      <div style="font-size:.75rem;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:6px">Client</div>
+      <table class="info-table">
+        <tr><td>Nom</td><td>${doc.prenom || ""} ${doc.nom || ""}</td></tr>
+        ${doc.id_client ? `<tr><td>ID Client</td><td>${doc.id_client}</td></tr>` : ""}
+      </table>
+    </div>
+    <div>
+      <div style="font-size:.75rem;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:6px">V\xE9hicule</div>
+      <table class="info-table">
+        <tr><td>V\xE9hicule</td><td>${doc.marque || ""} ${doc.modele || ""}</td></tr>
+        <tr><td>Immat.</td><td>${doc.immatriculation || "\u2014"}</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <table class="info-table" style="margin-bottom:16px">
+    <tr><td>Date</td><td>${date}</td></tr>
+    ${validite}${echeance}
+  </table>
+
+  <table style="width:100%;border-collapse:collapse;margin-bottom:14px">
+    <thead>
+      <tr class="lines-table">
+        <th style="padding:7px 10px;text-align:left;font-size:.78rem;background:#1565c0;color:#fff">Description</th>
+        <th style="padding:7px 10px;text-align:center;font-size:.78rem;background:#1565c0;color:#fff">Qt\xE9</th>
+        <th style="padding:7px 10px;text-align:right;font-size:.78rem;background:#1565c0;color:#fff">Prix unit.</th>
+        <th style="padding:7px 10px;text-align:right;font-size:.78rem;background:#1565c0;color:#fff">Montant</th>
+      </tr>
+    </thead>
+    <tbody>${lignesHtml}</tbody>
+  </table>
+
+  <table class="totaux-table" style="margin-left:auto;width:auto;min-width:220px">
+    <tr><td style="padding:5px 10px;text-align:right;color:#555">Montant HT :</td><td style="padding:5px 10px;text-align:right">${fmt(montantHT)}</td></tr>
+    ${tva > 0 ? `<tr><td style="padding:5px 10px;text-align:right;color:#555">TVA (${tva}%) :</td><td style="padding:5px 10px;text-align:right">${fmt(montantTTC - montantHT)}</td></tr>` : ""}
+    <tr style="background:#e3f2fd"><td style="padding:7px 10px;text-align:right;font-weight:800;color:#1565c0">Total TTC :</td><td style="padding:7px 10px;text-align:right;font-weight:800;color:#1565c0;font-size:1.05rem">${fmt(montantTTC)}</td></tr>
+    ${paiementSection}
+  </table>
+
+  ${doc.notes ? `<div class="notes">\u{1F4DD} ${doc.notes}</div>` : ""}
+
+  <div class="footer">
+    ${atelierNom} \xB7 Document g\xE9n\xE9r\xE9 le ${(/* @__PURE__ */ new Date()).toLocaleDateString("fr-FR")} \xB7 DiagAuto Mada
+  </div>
+</div>
+</body>
+</html>`;
+    };
+    exports2.accesPublicDocument = async (req, res) => {
+      try {
+        const { token } = req.params;
+        const entry = _tokensPublics.get(token);
+        if (!entry || entry.expires < Date.now()) {
+          return res.status(410).type("html").send(`<html><body style="font-family:sans-serif;padding:40px;text-align:center"><h2>Lien expir\xE9</h2><p>Ce document n'est plus disponible via ce lien.</p></body></html>`);
+        }
+        const { type, id } = entry;
+        const configs = {
+          facture: { table: "factures", num: "numero_facture", date: "date_facture" },
+          devis: { table: "devis", num: "numero_devis", date: "date_devis" },
+          proforma: { table: "proformas", num: "numero_proforma", date: "date_proforma" }
+        };
+        const cfg = configs[type];
+        if (!cfg) return res.status(404).send("Type de document inconnu");
+        const joins = {
+          facture: "JOIN clients c ON d.client_id=c.id JOIN vehicules v ON d.vehicule_id=v.id",
+          devis: "JOIN clients c ON d.client_id=c.id JOIN vehicules v ON d.vehicule_id=v.id",
+          proforma: "JOIN clients c ON d.client_id=c.id JOIN vehicules v ON d.vehicule_id=v.id"
+        };
+        const [[doc]] = await db2.query(
+          `SELECT d.*, c.nom, c.prenom, c.id_client, v.marque, v.modele, v.immatriculation
+       FROM ${cfg.table} d ${joins[type]} WHERE d.id = ?`,
+          [id]
+        );
+        if (!doc) return res.status(404).type("html").send('<html><body style="font-family:sans-serif;padding:40px;text-align:center"><h2>Document introuvable</h2></body></html>');
+        const [lignes] = await db2.query(
+          "SELECT * FROM lignes_document WHERE document_type = ? AND document_id = ? ORDER BY id",
+          [type, id]
+        );
+        const [[atelier]] = await db2.query("SELECT * FROM atelier_config WHERE id = 1").catch(() => [[{}]]);
+        doc._type = type;
+        res.type("html").send(_htmlDocument(doc, lignes, atelier || {}));
+      } catch (err) {
+        res.status(500).type("html").send(`<html><body style="padding:40px"><h2>Erreur</h2><p>${err.message}</p></body></html>`);
+      }
+    };
     var genNumero = (prefix) => {
       const date = /* @__PURE__ */ new Date();
       const annee = date.getFullYear();
@@ -54333,10 +54558,12 @@ var require_factureController = __commonJS({
       const rand = Math.floor(1e3 + Math.random() * 9e3);
       return `${prefix}-${annee}${mois}-${rand}`;
     };
-    var getAccesFactureClientComplet = (id) => {
-      const clientUrl = String(process.env.APP_CLIENT_URL || "").trim().replace(/\/$/, "");
-      const urlUtilisable = clientUrl && /^https?:\/\//i.test(clientUrl) && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(clientUrl);
-      return urlUtilisable ? `Lien facture numerique : ${clientUrl}/documents/facture/${id}/imprimer` : "Facture numerique jointe dans l application client DiagAuto Mada : ouvrez Documents > Factures > Voir / Imprimer.";
+    var formatMontant = (montant) => `${Number(montant || 0).toLocaleString("fr-FR")} Ar`;
+    var _formatLignes = (lignes) => {
+      if (!lignes || !lignes.length) return "";
+      return "\n" + lignes.map(
+        (l) => `  \u2022 ${l.description} x${l.quantite} = ${formatMontant(l.montant)}`
+      ).join("\n");
     };
     exports2.creerDevis = async (req, res) => {
       try {
@@ -54390,6 +54617,45 @@ var require_factureController = __commonJS({
         const { statut } = req.body;
         await db2.query("UPDATE devis SET statut = ? WHERE id = ?", [statut, id]);
         res.json({ message: "Statut mis \xE0 jour" });
+      } catch (err) {
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+      }
+    };
+    exports2.envoyerDevis = async (req, res) => {
+      try {
+        const { id } = req.params;
+        const [[d]] = await db2.query(
+          `SELECT d.client_id, d.numero_devis, d.date_validite, d.montant_ht, d.tva, d.montant_ttc, d.statut,
+              v.marque, v.modele, v.immatriculation
+       FROM devis d JOIN vehicules v ON d.vehicule_id = v.id
+       WHERE d.id = ?`,
+          [id]
+        );
+        if (!d) return res.status(404).json({ message: "Devis introuvable" });
+        if (d.statut === "brouillon") {
+          await db2.query("UPDATE devis SET statut = 'envoye' WHERE id = ?", [id]);
+          d.statut = "envoye";
+        }
+        const [lignes] = await db2.query(
+          "SELECT * FROM lignes_document WHERE document_type = ? AND document_id = ? ORDER BY id",
+          ["devis", id]
+        );
+        const validite = d.date_validite ? `
+Validit\xE9 : ${(/* @__PURE__ */ new Date(`${String(d.date_validite).slice(0, 10)}T12:00:00`)).toLocaleDateString("fr-FR")}` : "";
+        const lien = _getLienPublic("devis", id);
+        const whatsapp = await envoyerWhatsAppClient({
+          clientId: d.client_id,
+          type: "devis_envoi",
+          message: `DiagAuto Mada
+Devis disponible.
+Devis : ${d.numero_devis}
+V\xE9hicule : ${d.marque} ${d.modele} (${d.immatriculation})
+Total TTC : ${formatMontant(d.montant_ttc)}${validite}
+Statut : ${String(d.statut || "").replaceAll("_", " ")}${_formatLignes(lignes)}
+
+\u{1F517} Voir le document : ${lien}`
+        });
+        res.json({ message: "Devis pret a envoyer", statut: d.statut, whatsapp });
       } catch (err) {
         res.status(500).json({ message: "Erreur serveur", error: err.message });
       }
@@ -54463,6 +54729,45 @@ var require_factureController = __commonJS({
         const { statut } = req.body;
         await db2.query("UPDATE proformas SET statut = ? WHERE id = ?", [statut, id]);
         res.json({ message: "Statut mis a jour" });
+      } catch (err) {
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+      }
+    };
+    exports2.envoyerProforma = async (req, res) => {
+      try {
+        const { id } = req.params;
+        const [[p]] = await db2.query(
+          `SELECT p.client_id, p.numero_proforma, p.date_validite, p.montant_ht, p.tva, p.montant_ttc, p.statut,
+              v.marque, v.modele, v.immatriculation
+       FROM proformas p JOIN vehicules v ON p.vehicule_id = v.id
+       WHERE p.id = ?`,
+          [id]
+        );
+        if (!p) return res.status(404).json({ message: "Proforma introuvable" });
+        if (p.statut === "brouillon") {
+          await db2.query("UPDATE proformas SET statut = 'envoye' WHERE id = ?", [id]);
+          p.statut = "envoye";
+        }
+        const [lignes] = await db2.query(
+          "SELECT * FROM lignes_document WHERE document_type = ? AND document_id = ? ORDER BY id",
+          ["proforma", id]
+        );
+        const validite = p.date_validite ? `
+Validit\xE9 : ${(/* @__PURE__ */ new Date(`${String(p.date_validite).slice(0, 10)}T12:00:00`)).toLocaleDateString("fr-FR")}` : "";
+        const lien = _getLienPublic("proforma", id);
+        const whatsapp = await envoyerWhatsAppClient({
+          clientId: p.client_id,
+          type: "proforma_envoi",
+          message: `DiagAuto Mada
+Proforma disponible.
+Proforma : ${p.numero_proforma}
+V\xE9hicule : ${p.marque} ${p.modele} (${p.immatriculation})
+Total TTC : ${formatMontant(p.montant_ttc)}${validite}
+Statut : ${String(p.statut || "").replaceAll("_", " ")}${_formatLignes(lignes)}
+
+\u{1F517} Voir le document : ${lien}`
+        });
+        res.json({ message: "Proforma pret a envoyer", statut: p.statut, whatsapp });
       } catch (err) {
         res.status(500).json({ message: "Erreur serveur", error: err.message });
       }
@@ -54542,26 +54847,32 @@ var require_factureController = __commonJS({
       try {
         const { id } = req.params;
         const [[f]] = await db2.query(
-          `SELECT f.client_id, f.numero_facture, f.montant_ttc, f.montant_paye, f.statut,
+          `SELECT f.client_id, f.numero_facture, f.montant_ht, f.tva, f.montant_ttc, f.montant_paye, f.statut,
               v.marque, v.modele, v.immatriculation
        FROM factures f JOIN vehicules v ON f.vehicule_id = v.id
        WHERE f.id = ?`,
           [id]
         );
         if (!f) return res.status(404).json({ message: "Facture introuvable" });
-        const reste = Number(f.montant_ttc) - Number(f.montant_paye || 0);
+        const [lignes] = await db2.query(
+          "SELECT * FROM lignes_document WHERE document_type = ? AND document_id = ? ORDER BY id",
+          ["facture", id]
+        );
+        const reste = Math.max(0, Number(f.montant_ttc) - Number(f.montant_paye || 0));
+        const lien = _getLienPublic("facture", id);
         const whatsapp = await envoyerWhatsAppClient({
           clientId: f.client_id,
           type: "facture_envoi",
           message: `DiagAuto Mada
 Facture disponible.
 Facture : ${f.numero_facture}
-Vehicule : ${f.marque} ${f.modele} (${f.immatriculation})
-Total : ${Number(f.montant_ttc).toLocaleString("fr-FR")} Ar
-Deja paye : ${Number(f.montant_paye || 0).toLocaleString("fr-FR")} Ar
-Reste : ${Math.max(0, reste).toLocaleString("fr-FR")} Ar
-Statut : ${String(f.statut || "").replaceAll("_", " ")}
-${getAccesFactureClientComplet(id)}`
+V\xE9hicule : ${f.marque} ${f.modele} (${f.immatriculation})
+Total TTC : ${formatMontant(f.montant_ttc)}
+D\xE9j\xE0 pay\xE9 : ${formatMontant(f.montant_paye)}
+Reste \xE0 payer : ${formatMontant(reste)}
+Statut : ${String(f.statut || "").replaceAll("_", " ")}${_formatLignes(lignes)}
+
+\u{1F517} Voir la facture : ${lien}`
         });
         res.json({ message: "Facture prete a envoyer", whatsapp });
       } catch (err) {
@@ -54581,16 +54892,18 @@ ${getAccesFactureClientComplet(id)}`
         if (!f) return res.status(404).json({ message: "Facture introuvable" });
         const statut = montant_paye >= f.montant_ttc ? "payee" : montant_paye > 0 ? "partiellement_payee" : "non_payee";
         await db2.query("UPDATE factures SET montant_paye = ?, statut = ? WHERE id = ?", [montant_paye, statut, id]);
+        const lien = _getLienPublic("facture", id);
         const whatsapp = await envoyerWhatsAppClient({
           clientId: f.client_id,
           type: "facture_paiement",
           message: `DiagAuto Mada
-Paiement facture valide.
+Paiement facture valid\xE9.
 Facture : ${f.numero_facture}
-Vehicule : ${f.marque} ${f.modele} (${f.immatriculation})
-Montant paye : ${Number(montant_paye).toLocaleString("fr-FR")} Ar
+V\xE9hicule : ${f.marque} ${f.modele} (${f.immatriculation})
+Montant pay\xE9 : ${formatMontant(montant_paye)}
 Statut : ${statut.replaceAll("_", " ")}
-${getAccesFactureClientComplet(id)}`
+
+\u{1F517} Voir la facture : ${lien}`
         });
         res.json({ message: "Paiement enregistr\xE9", statut, whatsapp });
       } catch (err) {
@@ -55494,15 +55807,18 @@ var require_routes = __commonJS({
     router.get("/admin/rendezvous/notifications/stats", verifyToken, isAdmin, rdvCtrl.getRdvNotificationsStatsAdmin);
     router.get("/admin/rendezvous/:id/messages", verifyToken, isAdmin, rdvCtrl.getMessagesRdvAdmin);
     router.post("/admin/rendezvous/:id/messages", verifyToken, isAdmin, rdvCtrl.envoyerMessageRdvAdmin);
+    router.post("/admin/rendezvous/:id/envoyer", verifyToken, isAdmin, rdvCtrl.envoyerRdvWhatsApp);
     router.put("/admin/rendezvous/:id/statut", verifyToken, isAdmin, rdvCtrl.changerStatutRdv);
     router.get("/admin/interventions", verifyToken, isAdmin, interCtrl.getAllInterventions);
     router.post("/admin/interventions", verifyToken, isAdmin, interCtrl.creerIntervention);
     router.put("/admin/interventions/:id/statut", verifyToken, isAdmin, interCtrl.changerStatut);
     router.post("/admin/devis", verifyToken, isAdmin, factureCtrl.creerDevis);
     router.get("/admin/devis", verifyToken, isAdmin, factureCtrl.getAllDevis);
+    router.post("/admin/devis/:id/envoyer", verifyToken, isAdmin, factureCtrl.envoyerDevis);
     router.put("/admin/devis/:id/statut", verifyToken, isAdmin, factureCtrl.changerStatutDevis);
     router.post("/admin/proformas", verifyToken, isAdmin, factureCtrl.creerProforma);
     router.get("/admin/proformas", verifyToken, isAdmin, factureCtrl.getAllProformas);
+    router.post("/admin/proformas/:id/envoyer", verifyToken, isAdmin, factureCtrl.envoyerProforma);
     router.put("/admin/proformas/:id/statut", verifyToken, isAdmin, factureCtrl.changerStatutProforma);
     router.post("/admin/factures", verifyToken, isAdmin, factureCtrl.creerFacture);
     router.get("/admin/factures", verifyToken, isAdmin, factureCtrl.getAllFactures);
@@ -55544,6 +55860,7 @@ var require_routes = __commonJS({
     router.get("/admin/factures/:id/imprimer", verifyToken, isAdmin, atelierCtrl.getFactureDetail);
     router.get("/admin/documents/:type/:id/imprimer", verifyToken, isAdmin, atelierCtrl.getAdminDocumentDetail);
     router.get("/client/documents/:type/:id/imprimer", verifyToken, isClient, atelierCtrl.getClientDocumentDetail);
+    router.get("/public/documents/:token", factureCtrl.accesPublicDocument);
     router.get("/admin/systeme/stats", verifyToken, isAdmin, systemCtrl.getStats);
     router.get("/admin/systeme/whatsapp", verifyToken, isAdmin, systemCtrl.getWhatsAppStatus);
     router.post("/admin/systeme/whatsapp/verifier", verifyToken, isAdmin, systemCtrl.verifierWhatsApp);

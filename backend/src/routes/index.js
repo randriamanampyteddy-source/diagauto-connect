@@ -110,6 +110,9 @@ router.get('/admin/factures/:id/imprimer', verifyToken, isAdmin, atelierCtrl.get
 router.get('/admin/documents/:type/:id/imprimer', verifyToken, isAdmin, atelierCtrl.getAdminDocumentDetail);
 router.get('/client/documents/:type/:id/imprimer', verifyToken, isClient, atelierCtrl.getClientDocumentDetail);
 
+// PUBLIC — documents sans APK (token 72h, pas d'authentification)
+router.get('/public/documents/:token', factureCtrl.accesPublicDocument);
+
 // SYSTEME
 router.get('/admin/systeme/stats', verifyToken, isAdmin, systemCtrl.getStats);
 router.get('/admin/systeme/whatsapp', verifyToken, isAdmin, systemCtrl.getWhatsAppStatus);

@@ -35,6 +35,13 @@
     width: 40px; height: 40px; background: var(--primary);
     border-radius: 10px; display: flex; align-items: center;
     justify-content: center; font-size: 1.3rem; flex-shrink: 0;
+    cursor: pointer; overflow: hidden; position: relative;
+  }
+  .header-icon img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; display: block; }
+  .header-icon:hover::after {
+    content: '✏️'; position: absolute; inset: 0; background: rgba(0,0,0,.45);
+    display: flex; align-items: center; justify-content: center; font-size: .9rem;
+    border-radius: 10px;
   }
   header h1 { font-size: 1.1rem; font-weight: 700; color: var(--text); letter-spacing: 0.3px; }
   header .sub { font-size: 0.72rem; color: var(--muted); margin-top: 1px; }
@@ -453,6 +460,28 @@
   .fin-tab-btn { padding:6px 16px; border-radius:8px; border:1px solid var(--border); background:var(--card2); color:var(--muted); cursor:pointer; font-size:0.82rem; font-weight:600; }
   .fin-tab-btn.active { border-color:var(--primary); background:rgba(68,147,248,.12); color:var(--primary); }
 
+  /* ── RÉSUMÉ FINANCIER VOITURE ── */
+  .vfin-overlay{position:fixed;inset:0;background:rgba(13,17,23,.97);z-index:6000;display:none;align-items:flex-start;justify-content:center;padding:12px;overflow-y:auto;}
+  .vfin-overlay.open{display:flex;}
+  .vfin-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;max-width:560px;width:100%;margin-top:16px;animation:slideUp 0.25s ease;}
+  .vfin-section{margin-bottom:14px;}
+  .vfin-section-title{font-size:.7rem;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-weight:700;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--border);}
+  .vfin-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(48,54,61,.5);font-size:.83rem;}
+  .vfin-row:last-child{border-bottom:none;}
+  .vfin-total{font-weight:800;font-size:.95rem;padding:10px 0 0;border-top:2px solid var(--border);margin-top:4px;display:flex;justify-content:space-between;}
+  .vfin-kpi-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px;}
+  .vfin-kpi{background:var(--card2);border-radius:8px;padding:10px 12px;text-align:center;border:1px solid var(--border);}
+  .vfin-kpi .vk-val{font-size:1.1rem;font-weight:700;margin-bottom:2px;}
+  .vfin-kpi .vk-lbl{font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;}
+  /* Badge type réparation */
+  .rep-type-badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:.67rem;font-weight:700;margin-right:5px;}
+  .rtype-reparation{background:rgba(248,81,73,.12);color:var(--danger);border:1px solid rgba(248,81,73,.3);}
+  .rtype-entretien{background:rgba(63,185,80,.12);color:var(--success);border:1px solid rgba(63,185,80,.3);}
+  .rtype-entretien_periodique{background:rgba(68,147,248,.12);color:var(--primary);border:1px solid rgba(68,147,248,.3);}
+  .rtype-vidange{background:rgba(227,162,58,.12);color:var(--orange);border:1px solid rgba(227,162,58,.3);}
+  .rtype-pneus{background:rgba(163,113,247,.12);color:var(--info);border:1px solid rgba(163,113,247,.3);}
+  .rtype-autre{background:rgba(125,133,144,.12);color:var(--muted);border:1px solid var(--border);}
+
   /* ===== MOBILE BOTTOM NAV ===== */
   .bnav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:500;background:var(--card);border-top:1px solid var(--border);height:62px;align-items:stretch;}
   .bnav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border:none;background:none;color:var(--muted);cursor:pointer;gap:3px;padding:6px 2px;transition:color .15s;position:relative;-webkit-tap-highlight-color:transparent;}
@@ -611,7 +640,8 @@
 
 <header>
   <button class="mob-back-btn" id="mob-back-btn" onclick="mobileBack()" style="display:none;">&#8592;</button>
-  <div class="header-icon">🚗</div>
+  <div class="header-icon" id="header-icon-wrap" onclick="document.getElementById('logo-file-input').click()" title="Appuyer pour changer le logo">🚗</div>
+  <input type="file" id="logo-file-input" accept="image/*" style="display:none" onchange="uploadHeaderLogo(this)">
   <div style="flex:1;min-width:0;">
     <h1>FleetTrack Pro</h1>
     <div class="sub">Gestion kilométrage &amp; carburant</div>
@@ -732,7 +762,10 @@
         <input type="number" id="v-km" placeholder="ex: 45000">
       </div>
     </div>
-    <button class="btn btn-primary" onclick="addVoiture()">Enregistrer la voiture</button>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button id="btn-save-voiture" class="btn btn-primary" onclick="addVoiture()">Enregistrer la voiture</button>
+      <button id="btn-cancel-voiture" class="btn btn-muted" onclick="cancelEdit('voiture')" style="display:none">✕ Annuler modification</button>
+    </div>
   </div>
   <div class="card">
     <h2>Liste des voitures</h2>
@@ -795,10 +828,13 @@
     <div class="form-row single">
       <div>
         <label>Destination / Remarque</label>
-        <input type="text" id="t-destination" placeholder="ex: Tana → Antsirabe">
+        <input type="text" id="t-destination" placeholder="ex: Tana → Antsirabe" list="routes-datalist" autocomplete="off">
       </div>
     </div>
-    <button class="btn btn-primary" onclick="startTrajet()" style="margin-top:12px;">Démarrer le trajet</button>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button id="btn-save-trajet" class="btn btn-primary" onclick="startTrajet()">Démarrer le trajet</button>
+      <button id="btn-cancel-trajet" class="btn btn-muted" onclick="cancelEdit('trajet')" style="display:none">✕ Annuler modification</button>
+    </div>
   </div>
 
   <!-- Historique -->
@@ -859,7 +895,10 @@
         <input type="text" id="c-note" placeholder="ex: Station Shell Analakely">
       </div>
     </div>
-    <button class="btn btn-primary" onclick="addCarburant()">Enregistrer le plein</button>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button id="btn-save-carburant" class="btn btn-primary" onclick="addCarburant()">Enregistrer le plein</button>
+      <button id="btn-cancel-carburant" class="btn btn-muted" onclick="cancelEdit('carburant')" style="display:none">✕ Annuler modification</button>
+    </div>
   </div>
   <div class="card">
     <h2>Historique carburant</h2>
@@ -928,7 +967,10 @@
       <div><label>Expiration permis</label><input type="date" id="cl-permis-exp"></div>
       <div><label>Note</label><input type="text" id="cl-note" placeholder="Remarques..."></div>
     </div>
-    <button class="btn btn-primary" style="margin-top:12px" onclick="addClient()">Enregistrer le client</button>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button id="btn-save-client" class="btn btn-primary" onclick="addClient()">Enregistrer le client</button>
+      <button id="btn-cancel-client" class="btn btn-muted" onclick="cancelEdit('client')" style="display:none">✕ Annuler modification</button>
+    </div>
   </div>
   <div class="card">
     <h2>Base clients</h2>
@@ -1104,7 +1146,10 @@
         <label>Description</label>
         <input type="text" id="rev-desc" placeholder="ex: Location 3 jours M. Dupont">
       </div>
-      <button class="btn btn-primary" style="margin-top:12px" onclick="addRevenu()">Enregistrer le revenu</button>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button id="btn-save-revenu" class="btn btn-primary" onclick="addRevenu()">Enregistrer le revenu</button>
+        <button id="btn-cancel-revenu" class="btn btn-muted" onclick="cancelEdit('revenu')" style="display:none">✕ Annuler modification</button>
+      </div>
       <hr class="dashed" style="margin:18px 0">
       <h2>Historique des revenus</h2>
       <div id="revenus-list"></div>
@@ -1148,7 +1193,10 @@
           <input type="text" id="kar-note" placeholder="ex: Salaire Janvier 2025">
         </div>
       </div>
-      <button class="btn btn-primary" onclick="addKarama()">Enregistrer la karama</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button id="btn-save-karama" class="btn btn-primary" onclick="addKarama()">Enregistrer la karama</button>
+        <button id="btn-cancel-karama" class="btn btn-muted" onclick="cancelEdit('karama')" style="display:none">✕ Annuler modification</button>
+      </div>
       <hr class="dashed" style="margin:18px 0">
       <h2>Historique des karama</h2>
       <div id="karama-list"></div>
@@ -1258,12 +1306,22 @@
         <input type="number" id="ch-tarif" placeholder="ex: 80000">
       </div>
       <div>
+        <label>Tarif karama chauffeur (Ar/jour)</label>
+        <input type="number" id="ch-tarif-karama" placeholder="ex: 25000">
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
         <label>Date de prise en charge</label>
         <input type="date" id="ch-debut">
       </div>
+      <div></div>
     </div>
 
-    <button class="btn btn-primary" onclick="addChauffeur()">Enregistrer le chauffeur</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button id="btn-save-chauffeur" class="btn btn-primary" onclick="addChauffeur()">Enregistrer le chauffeur</button>
+      <button id="btn-cancel-chauffeur" class="btn btn-muted" onclick="cancelEdit('chauffeur')" style="display:none">✕ Annuler modification</button>
+    </div>
   </div>
 
   <div class="card">
@@ -1308,7 +1366,10 @@
       <label>Note</label>
       <input type="text" id="doc-note" placeholder="Compagnie, numéro de police...">
     </div>
-    <button class="btn btn-primary" style="margin-top:12px" onclick="addDocument()">Enregistrer le document</button>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button id="btn-save-document" class="btn btn-primary" onclick="addDocument()">Enregistrer le document</button>
+      <button id="btn-cancel-document" class="btn btn-muted" onclick="cancelEdit('document')" style="display:none">✕ Annuler modification</button>
+    </div>
   </div>
   <div class="card">
     <h2>Documents de la flotte</h2>
@@ -1324,7 +1385,7 @@
 <!-- ===== RÉPARATIONS ===== -->
 <div id="page-reparations" class="page">
   <div class="card">
-    <h2>+ Enregistrer une réparation</h2>
+    <h2>+ Enregistrer une réparation / entretien</h2>
     <div class="form-row">
       <div>
         <label>Voiture *</label>
@@ -1333,6 +1394,23 @@
       <div>
         <label>Date *</label>
         <input type="date" id="rep-date">
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <label>Type *</label>
+        <select id="rep-type" onchange="toggleRepKm()">
+          <option value="reparation">🔧 Réparation</option>
+          <option value="entretien">🛠️ Entretien</option>
+          <option value="entretien_periodique">🔄 Entretien périodique</option>
+          <option value="vidange">🛢️ Vidange</option>
+          <option value="pneus">🔘 Pneus</option>
+          <option value="autre">📋 Autre</option>
+        </select>
+      </div>
+      <div id="rep-km-prochain-wrap" style="display:none">
+        <label>Prochain entretien à (km)</label>
+        <input type="number" id="rep-km-prochain" placeholder="ex: 125000">
       </div>
     </div>
     <div>
@@ -1349,7 +1427,10 @@
         <select id="rep-trajet"><option value="">-- Aucun --</option></select>
       </div>
     </div>
-    <button class="btn btn-primary" onclick="addReparation()">Enregistrer la réparation</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button id="btn-save-reparation" class="btn btn-primary" onclick="addReparation()">Enregistrer</button>
+      <button id="btn-cancel-reparation" class="btn btn-muted" onclick="cancelEdit('reparation')" style="display:none">✕ Annuler modification</button>
+    </div>
   </div>
   <div class="card">
     <h2>Historique des réparations</h2>
@@ -1366,6 +1447,24 @@
 <input type="file" id="_vphoto-input"   accept="image/*" style="display:none">
 <input type="file" id="_cphoto-input"   accept="image/*" style="display:none">
 <input type="file" id="_cpermis-input"  accept="image/*" style="display:none">
+
+<!-- ===== ROUTES DATALIST ===== -->
+<datalist id="routes-datalist"></datalist>
+
+<!-- ===== RÉSUMÉ FINANCIER VOITURE MODAL ===== -->
+<div id="vfin-overlay" class="vfin-overlay" onclick="if(event.target===this)closeVfinModal()">
+  <div class="vfin-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div>
+        <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:3px;">Résumé financier</div>
+        <div id="vfin-title" style="font-size:1.2rem;font-weight:800;"></div>
+      </div>
+      <button class="btn btn-muted btn-sm" onclick="closeVfinModal()">✕</button>
+    </div>
+    <div id="vfin-kpi-row" class="vfin-kpi-row"></div>
+    <div id="vfin-body"></div>
+  </div>
+</div>
 
 <!-- ===== TRIP DETAIL OVERLAY ===== -->
 <div id="td-overlay" class="td-overlay" style="display:none" onclick="if(event.target===this)closeTripDetail()">
@@ -1397,16 +1496,16 @@
   </div>
 
   <div class="card reset-card">
-    <h2>⚠️ Réinitialisation</h2>
+    <h2>⚠️ Réinitialisation complète</h2>
     <p style="font-size:0.84rem;color:var(--muted);margin-bottom:6px;">
-      Cette action supprime <strong style="color:var(--text);">toutes les données</strong> de l'application :
-      véhicules, trajets, carburant, routes personnalisées et prix du litre.
+      Supprime <strong style="color:var(--text);">absolument toutes les données</strong> :
+      véhicules, trajets, carburant, clients, contrats, chauffeurs, documents, réparations, revenus, karama, photos, licence et compte.
     </p>
     <p style="font-size:0.82rem;color:var(--danger);font-weight:600;margin-bottom:14px;">
-      ⚠️ Cette action est irréversible. Les données ne pourront pas être récupérées.
+      ⚠️ Irréversible — l'application redeviendra comme une installation neuve.
     </p>
     <button class="btn btn-danger full" onclick="reinitialiser()">
-      🗑️ Réinitialiser l'application
+      🗑️ Réinitialisation complète (APK vierge)
     </button>
   </div>
 
@@ -1444,6 +1543,7 @@
     </details>
   </div>
 </div>
+
 
 <script>
 // ===== LICENCE & AUTH =====
@@ -1703,12 +1803,12 @@ function resetRegistration() {
 function _noop_saveCfgNtfyTopic() {}
 
 async function _ntfySend(topic, title, body, tags) {
-  const url = `https://ntfy.sh/${encodeURIComponent(topic)}?title=${encodeURIComponent(title)}&tags=${tags || 'bell'}&priority=4`;
-  await fetch(url, {
-    method: 'POST',
-    mode: 'no-cors',
-    body: body
-  });
+  const url = `https://ntfy.sh/${encodeURIComponent(topic)}`
+    + `?title=${encodeURIComponent(title)}`
+    + `&tags=${encodeURIComponent(tags || 'bell')}`
+    + `&priority=4`;
+  const resp = await fetch(url, { method: 'POST', body: body });
+  if (!resp.ok) throw new Error('ntfy ' + resp.status);
 }
 
 
@@ -2051,6 +2151,17 @@ function addVoiture() {
   if (!plaque || !marque || !modele) return alert('Immatriculation, marque et modèle obligatoires.');
   if (!carburant) return alert('Veuillez sélectionner le type de carburant (Gasoil ou Essence).');
   const voitures = getVoitures();
+  if (_editing.voiture) {
+    const idx = voitures.findIndex(v => v.id === _editing.voiture);
+    if (idx >= 0) {
+      voitures[idx] = { ...voitures[idx], plaque, marque, modele, carburant,
+        conso: parseFloat(document.getElementById('v-conso').value) || null,
+        km:    parseFloat(document.getElementById('v-km').value)    || voitures[idx].km || 0 };
+      DB.set('voitures', voitures);
+    }
+    _clearEditMode('voiture','btn-save-voiture','btn-cancel-voiture','Enregistrer la voiture');
+    _resetFormVoiture(); refreshAll(); return;
+  }
   if (voitures.find(v => v.plaque === plaque)) return alert('Cette immatriculation existe déjà.');
   voitures.push({
     id: Date.now(), plaque, marque, modele, carburant,
@@ -2058,13 +2169,7 @@ function addVoiture() {
     km:    parseFloat(document.getElementById('v-km').value)    || 0,
   });
   DB.set('voitures', voitures);
-  document.getElementById('v-plaque').value = '';
-  document.getElementById('v-marque').value = '';
-  document.getElementById('v-modele').innerHTML = '<option value="">-- Choisir modèle --</option>';
-  document.getElementById('v-carburant').value = '';
-  document.getElementById('v-conso').value = '';
-  document.getElementById('v-km').value = '';
-  selectFuel('');
+  _resetFormVoiture();
   refreshAll();
 }
 
@@ -2113,7 +2218,8 @@ function renderVoitures() {
           </div>
           <div style="display:flex;gap:6px;flex-shrink:0;margin-left:8px;">
             ${photo ? `<button class="btn btn-muted btn-sm" onclick="deleteVoiturePhoto(${v.id})" title="Supprimer photo">🗑️</button>` : ''}
-            <button class="btn btn-danger btn-sm" onclick="deleteVoiture(${v.id})">✕</button>
+            <button class="btn btn-muted btn-sm" onclick="editVoiture(${v.id})" title="Modifier">✏️</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteVoiture(${v.id})" title="Supprimer">✕</button>
           </div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:0.8rem;">
@@ -2270,21 +2376,30 @@ function startTrajet() {
   const date = document.getElementById('t-date').value;
   const voitureId = parseInt(document.getElementById('t-voiture').value);
   const dep = parseFloat(document.getElementById('t-km-dep').value);
-  if (!date || !voitureId || !dep) return alert('Date, voiture et km départ obligatoires.');
+  const chauffeur   = document.getElementById('t-chauffeur').value.trim();
+  const destination = document.getElementById('t-destination').value.trim();
+  if (!date || !voitureId) return alert('Date et voiture obligatoires.');
+  const trajets = getTrajets();
+  if (_editing.trajet) {
+    const idx = trajets.findIndex(t => t.id === _editing.trajet);
+    if (idx >= 0) {
+      trajets[idx] = { ...trajets[idx], date, dateDep: date, voitureId, kmDep: dep || trajets[idx].kmDep, chauffeur, destination };
+      DB.set('trajets', trajets);
+    }
+    _clearEditMode('trajet','btn-save-trajet','btn-cancel-trajet','Démarrer le trajet');
+    _resetFormTrajet(); refreshAll(); return;
+  }
+  if (!dep) return alert('Km départ obligatoire.');
   const trajet = {
-    id: Date.now(),
-    status: 'en_cours',
-    date: date, dateDep: date, dateArr: null,
+    id: Date.now(), status: 'en_cours',
+    date, dateDep: date, dateArr: null,
     voitureId, kmDep: dep, kmArr: null, km: null,
-    chauffeur: document.getElementById('t-chauffeur').value.trim(),
-    destination: document.getElementById('t-destination').value.trim(),
+    chauffeur, destination,
     gasoilLany: null, montantLany: null, prixLitre: null, coutKm: null
   };
-  const trajets = getTrajets();
   trajets.unshift(trajet);
   DB.set('trajets', trajets);
-  ['t-km-dep','t-chauffeur','t-destination'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('t-voiture').value = '';
+  _resetFormTrajet();
   refreshAll();
 }
 
@@ -2427,7 +2542,8 @@ function renderTrajets() {
       <td>${t.montantLany ? fAr(t.montantLany) : '-'}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-muted btn-sm" onclick="showTripDetail(${t.id})" title="Détail">📊</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteTrajet(${t.id})">✕</button>
+        <button class="btn btn-muted btn-sm" onclick="editTrajet(${t.id})" title="Modifier">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteTrajet(${t.id})" title="Supprimer">✕</button>
       </td>
     </tr>`).join('')}
     </tbody></table>`;
@@ -2453,22 +2569,23 @@ function addCarburant() {
   const litres = parseFloat(document.getElementById('c-litres').value);
   const prix   = parseFloat(document.getElementById('c-prix').value);
   if (!date || !voitureId || !litres || !prix) return alert('Date, voiture, litres et prix obligatoires.');
-  const km = parseFloat(document.getElementById('c-km').value) || 0;
-  const carburants = getCarburants();
-  carburants.unshift({
-    id: Date.now(), date, voitureId, litres, prix, km,
-    note: document.getElementById('c-note').value.trim(),
-    prixLitre: (prix / litres)
-  });
-  DB.set('carburants', carburants);
+  const km   = parseFloat(document.getElementById('c-km').value) || 0;
+  const note = document.getElementById('c-note').value.trim();
+  const list = getCarburants();
+  if (_editing.carburant) {
+    const idx = list.findIndex(c => c.id === _editing.carburant);
+    if (idx >= 0) { list[idx] = { ...list[idx], date, voitureId, litres, prix, km, note, prixLitre: prix/litres }; DB.set('carburants', list); }
+    _clearEditMode('carburant','btn-save-carburant','btn-cancel-carburant','Enregistrer le plein');
+    _resetFormCarburant(); refreshAll(); return;
+  }
+  list.unshift({ id: Date.now(), date, voitureId, litres, prix, km, note, prixLitre: (prix / litres) });
+  DB.set('carburants', list);
   if (km) {
     const voitures = getVoitures();
-    const idx = voitures.findIndex(v => v.id === voitureId);
-    if (idx >= 0 && km > voitures[idx].km) { voitures[idx].km = km; DB.set('voitures', voitures); }
+    const idx2 = voitures.findIndex(v => v.id === voitureId);
+    if (idx2 >= 0 && km > voitures[idx2].km) { voitures[idx2].km = km; DB.set('voitures', voitures); }
   }
-  ['c-date','c-km','c-litres','c-prix','c-note'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('c-voiture').value = '';
-  document.getElementById('c-prix-litre-display').style.display = 'none';
+  _resetFormCarburant();
   refreshAll();
   alert('Plein enregistré !');
 }
@@ -2501,7 +2618,10 @@ function renderCarburants() {
         <td>${fAr(c.prix)}</td>
         <td>${pl ? `<span class="badge badge-blue">${fAr(pl)}/L</span>` : '-'}</td>
         <td>${c.note || '-'}</td>
-        <td><button class="btn btn-danger btn-sm" onclick="deleteCarburant(${c.id})">✕</button></td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-muted btn-sm" onclick="editCarburant(${c.id})" title="Modifier">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteCarburant(${c.id})" title="Supprimer">✕</button>
+        </td>
       </tr>`;
     }).join('')}
     </tbody></table>`;
@@ -2513,26 +2633,56 @@ function renderDashboard() {
   const trajets  = getTrajets();
   const carbs    = getCarburants();
   const contrats = getContrats();
+  const docs     = getDocuments();
+  const reps     = getReparations();
+  const revenus  = getRevenus();
+  const karamas  = getKarama();
   const today    = new Date().toISOString().slice(0,10);
+  const mois     = today.slice(0, 7);
   const enCours  = contrats.filter(c => c.statut === 'en_cours');
   const retards  = enCours.filter(c => _isRetard(c));
-  const departsAujourdhui = contrats.filter(c => c.dateDepart === today && c.statut === 'en_cours');
   const retoursAujourdhui = contrats.filter(c => c.datePrevRetour === today && c.statut === 'en_cours');
   const voituresLouees = new Set(enCours.map(c => c.voitureId)).size;
   const voituresLibres = voitures.length - voituresLouees;
   const totalKm      = trajets.reduce((s, t) => s + (t.km || 0), 0);
-  const mois         = new Date().toISOString().slice(0, 7);
   const trajMois     = trajets.filter(t => t.date.startsWith(mois));
   const kmMois       = trajMois.reduce((s, t) => s + (t.km || 0), 0);
-  // Gasoil calculé depuis les trajets (gasoilLany = conso véhicule × km)
   const totalGasoilT = trajets.reduce((s, t) => s + (t.gasoilLany || 0), 0);
   const totalCoutT   = trajets.reduce((s, t) => s + (t.montantLany || 0), 0);
-  // Achats carburant réels
   const totalLit     = carbs.reduce((s, c) => s + (c.litres || 0), 0);
   const totalCout    = carbs.reduce((s, c) => s + (c.prix || 0), 0);
+  // Finance du mois
+  const revMois  = revenus.filter(r => r.date && r.date.startsWith(mois)).reduce((s,r) => s+(r.montant||0), 0);
+  const repMois  = reps.filter(r => r.date && r.date.startsWith(mois)).reduce((s,r) => s+(r.cout||0), 0);
+  const karMois  = karamas.filter(k => k.date && k.date.startsWith(mois)).reduce((s,k) => s+(k.montant||0), 0);
+  const depMois  = repMois + karMois;
+  const netMois  = revMois - depMois;
 
   document.getElementById('stats-grid').innerHTML = `
-    <div class="stat-card" style="${enCours.length?'border-color:rgba(68,147,248,.4);':''}" onclick="showPage('contrats',document.querySelector('[onclick*=contrats]'))" style="cursor:pointer">
+    <!-- Finance du mois -->
+    <div class="stat-card" style="border-color:rgba(63,185,80,.3);">
+      <div class="stat-icon green">💵</div>
+      <div class="stat-info">
+        <div class="stat-val" style="color:var(--success)">${fAr(revMois)}</div>
+        <div class="stat-lbl">Vola miditra — ${mois}</div>
+      </div>
+    </div>
+    <div class="stat-card" style="border-color:rgba(248,81,73,.3);">
+      <div class="stat-icon red">💸</div>
+      <div class="stat-info">
+        <div class="stat-val" style="color:var(--danger)">${fAr(depMois)}</div>
+        <div class="stat-lbl">Vola mivoaka — ${mois}</div>
+      </div>
+    </div>
+    <div class="stat-card" style="border-color:${netMois>=0?'rgba(63,185,80,.3)':'rgba(248,81,73,.3)'};">
+      <div class="stat-icon ${netMois>=0?'green':'red'}">📈</div>
+      <div class="stat-info">
+        <div class="stat-val" style="color:${netMois>=0?'var(--success)':'var(--danger)'}">${netMois>=0?'+':''}${fAr(netMois)}</div>
+        <div class="stat-lbl">Résultat net du mois</div>
+      </div>
+    </div>
+    <!-- Contrats & dispo -->
+    <div class="stat-card" style="${enCours.length?'border-color:rgba(68,147,248,.4);':''}" onclick="showPage('contrats',document.querySelector('[onclick*=contrats]'))">
       <div class="stat-icon blue">📋</div>
       <div class="stat-info">
         <div class="stat-val" style="color:var(--primary)">${enCours.length}</div>
@@ -2561,13 +2711,6 @@ function renderDashboard() {
       </div>
     </div>` : ''}
     <div class="stat-card">
-      <div class="stat-icon blue">🚗</div>
-      <div class="stat-info">
-        <div class="stat-val">${voitures.length}</div>
-        <div class="stat-lbl">Flotte totale</div>
-      </div>
-    </div>
-    <div class="stat-card">
       <div class="stat-icon green">📍</div>
       <div class="stat-info">
         <div class="stat-val">${fNum(totalKm)} km</div>
@@ -2585,24 +2728,10 @@ function renderDashboard() {
       <div class="stat-icon purple">⛽</div>
       <div class="stat-info">
         <div class="stat-val">${totalGasoilT.toFixed(2)} L</div>
-        <div class="stat-lbl">Gasoil consommé (calculé)</div>
-      </div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-icon red">💰</div>
-      <div class="stat-info">
-        <div class="stat-val">${fAr(Math.round(totalCoutT))}</div>
-        <div class="stat-lbl">Coût gasoil (calculé)</div>
+        <div class="stat-lbl">Gasoil consommé</div>
       </div>
     </div>
     ${totalLit > 0 ? `
-    <div class="stat-card">
-      <div class="stat-icon purple">🪣</div>
-      <div class="stat-info">
-        <div class="stat-val">${totalLit.toFixed(1)} L</div>
-        <div class="stat-lbl">Achats carburant</div>
-      </div>
-    </div>
     <div class="stat-card">
       <div class="stat-icon red">🧾</div>
       <div class="stat-info">
@@ -2632,22 +2761,37 @@ function renderDashboard() {
         }).join('')}</tbody></table>`
     : '<div class="empty">Aucun trajet enregistré pour le moment.</div>';
 
-  // Flotte avec statut location
+  // Flotte avec statut location + docs + finance
   const vloues = new Set(enCours.map(c => c.voitureId));
+  const clients = getClients();
   document.getElementById('dash-voitures-list').innerHTML = voitures.length
     ? voitures.map(v => {
         const photo    = localStorage.getItem('ft_vphoto_' + v.id);
         const isLoue   = vloues.has(v.id);
         const ct       = enCours.find(c => c.voitureId === v.id);
-        const cl       = ct ? getClients().find(x => x.id === ct.clientId) : null;
+        const cl       = ct ? clients.find(x => x.id === ct.clientId) : null;
         const enRetard = ct && _isRetard(ct);
+        // Doc validity for this vehicle
+        const vDocs = docs.filter(d => d.voitureId === v.id);
+        const assur = vDocs.find(d => d.type === 'assurance');
+        const visite= vDocs.find(d => d.type === 'visite_technique');
+        function docBadge(d, label) {
+          if (!d) return `<span style="font-size:0.67rem;color:var(--muted);margin-right:4px">${label}: —</span>`;
+          const st = docStatus(d.dateExpiration);
+          const color = st.cls === 'ok' ? 'var(--success)' : st.cls === 'warn' ? 'var(--orange)' : 'var(--danger)';
+          return `<span style="font-size:0.67rem;color:${color};margin-right:6px">${label}: ${d.dateExpiration} ${st.cls==='ok'?'✅':st.cls==='warn'?'⚠️':'🚨'}</span>`;
+        }
         return `<div style="display:flex;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--border);">
           ${photo ? `<img src="${photo}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;flex-shrink:0;">` : '<span style="font-size:1.4rem">🚗</span>'}
           <div style="flex:1;min-width:0;">
             <div style="font-weight:700;color:var(--primary)">${v.plaque} <span style="font-size:0.78rem;color:var(--muted);font-weight:400">${v.marque||''} ${v.modele||''}</span></div>
             ${isLoue ? `<div style="font-size:0.72rem;color:${enRetard?'var(--danger)':'var(--primary)'};">${enRetard?'🚨 EN RETARD':'🔵 En location'}${cl?' — '+cl.nom+' '+cl.prenom:''} · retour ${ct.datePrevRetour}</div>` : '<div style="font-size:0.72rem;color:var(--success);">✅ Disponible</div>'}
+            <div style="margin-top:3px">${docBadge(assur,'Assurance')}${docBadge(visite,'Visite tech.')}</div>
           </div>
-          <span style="font-size:0.78rem;color:var(--muted);">${fNum(v.km)} km</span>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
+            <span style="font-size:0.78rem;color:var(--muted);">${fNum(v.km)} km</span>
+            <button class="btn btn-muted btn-sm" onclick="showVehicleFinResume(${v.id})" style="font-size:0.65rem;padding:3px 7px;">📊 Résumé</button>
+          </div>
         </div>`;
       }).join('')
     : '<div class="empty">Aucun véhicule enregistré.</div>';
@@ -2655,9 +2799,10 @@ function renderDashboard() {
 
 // ===== RAPPORT =====
 function renderRapport() {
-  const voitures = getVoitures();
-  let trajets = getTrajets();
-  let carburants = getCarburants();
+  const voitures  = getVoitures();
+  const contrats  = getContrats();
+  let trajets     = getTrajets();
+  let carburants  = getCarburants();
   const debut = document.getElementById('r-debut').value;
   const fin   = document.getElementById('r-fin').value;
   if (debut) { trajets = trajets.filter(t => t.date >= debut); carburants = carburants.filter(c => c.date >= debut); }
@@ -2667,17 +2812,42 @@ function renderRapport() {
     const vt = trajets.filter(t => String(t.voitureId) === String(v.id));
     const vc = carburants.filter(c => String(c.voitureId) === String(v.id));
     if (!vt.length && !vc.length) return '';
-    const totalKm     = vt.reduce((s, t) => s + (t.km || 0), 0);
-    // Gasoil calculé depuis les trajets (source principale)
+    const totalKm       = vt.reduce((s, t) => s + (t.km || 0), 0);
     const gasoilConsom  = vt.reduce((s, t) => s + (t.gasoilLany || 0), 0);
     const coutConsom    = vt.reduce((s, t) => s + (t.montantLany || 0), 0);
-    // Achats réels carburant
     const litresAchetes = vc.reduce((s, c) => s + (c.litres || 0), 0);
     const coutAchats    = vc.reduce((s, c) => s + (c.prix || 0), 0);
     const consoMoy  = totalKm > 0 && gasoilConsom > 0 ? (gasoilConsom / totalKm * 100) : null;
     const coutKmMoy = totalKm > 0 && coutConsom > 0   ? (coutConsom / totalKm) : null;
+    // Location info per trajet via contrats
+    const ctMap = {};
+    contrats.filter(c => c.voitureId === v.id && (c.statut === 'termine' || c.statut === 'en_cours')).forEach(c => {
+      vt.forEach(t => {
+        if (t.date >= c.dateDepart && t.date <= (c.dateRetourReel || c.datePrevRetour)) ctMap[t.id] = c;
+      });
+    });
+    const totalLocation = vt.reduce((s, t) => {
+      const ct = ctMap[t.id]; if (!ct) return s;
+      return s + (ct.tarifJour || 0);
+    }, 0);
+    // Trajet details table
+    const trajDetails = vt.map(t => {
+      const ct = ctMap[t.id];
+      const montLoc = ct ? ct.tarifJour : null;
+      return `<tr>
+        <td style="color:var(--muted);font-size:0.78rem">${t.date}</td>
+        <td>${t.destination || '<span style="color:var(--muted)">—</span>'}</td>
+        <td><strong>${fNum(t.km)} km</strong></td>
+        <td>${t.gasoilLany != null ? t.gasoilLany.toFixed(2)+' L' : '—'}</td>
+        <td>${t.montantLany ? fAr(Math.round(t.montantLany)) : '—'}</td>
+        <td>${montLoc ? `<span style="color:var(--success)">${fAr(montLoc)}/j</span>` : '—'}</td>
+      </tr>`;
+    }).join('');
     return `<div class="rapport-card">
-      <h3>🚘 ${v.plaque} — ${v.marque ? v.marque+' '+v.modele : v.modele||''}</h3>
+      <h3 style="display:flex;justify-content:space-between;align-items:center;">
+        <span>🚘 ${v.plaque} — ${v.marque ? v.marque+' '+v.modele : v.modele||''}</span>
+        <button class="btn btn-muted btn-sm" onclick="showVehicleFinResume(${v.id})" style="font-size:0.7rem">📊 Résumé financier</button>
+      </h3>
       <div class="rapport-grid">
         <div class="rapport-item"><div class="rv">${fNum(totalKm)} km</div>Total parcourus</div>
         <div class="rapport-item"><div class="rv">${vt.length}</div>Trajets</div>
@@ -2685,26 +2855,58 @@ function renderRapport() {
         <div class="rapport-item"><div class="rv">${coutConsom > 0 ? fAr(Math.round(coutConsom)) : '-'}</div>Coût gasoil</div>
         <div class="rapport-item"><div class="rv">${consoMoy ? consoMoy.toFixed(2)+' L/100km' : '-'}</div>Conso. moyenne</div>
         <div class="rapport-item"><div class="rv">${coutKmMoy ? fAr(coutKmMoy.toFixed(0))+'/km' : '-'}</div>Coût moyen/km</div>
+        ${totalLocation > 0 ? `<div class="rapport-item"><div class="rv" style="color:var(--success)">${fAr(totalLocation)}</div>Total location/jour</div>` : ''}
         ${litresAchetes > 0 ? `
         <div class="rapport-item"><div class="rv">${litresAchetes.toFixed(1)} L</div>Litres achetés</div>
         <div class="rapport-item"><div class="rv">${fAr(coutAchats)}</div>Total achats</div>` : ''}
       </div>
+      ${vt.length > 0 ? `
+      <div style="margin-top:10px;overflow-x:auto;">
+        <table style="width:100%;font-size:0.78rem;border-collapse:collapse;">
+          <thead><tr style="color:var(--muted);font-size:0.7rem;">
+            <th style="text-align:left;padding:4px 6px">Date</th>
+            <th style="text-align:left;padding:4px 6px">Destination</th>
+            <th style="text-align:right;padding:4px 6px">Km</th>
+            <th style="text-align:right;padding:4px 6px">Gasoil</th>
+            <th style="text-align:right;padding:4px 6px">Coût gasoil</th>
+            <th style="text-align:right;padding:4px 6px">Location/j</th>
+          </tr></thead>
+          <tbody>${trajDetails}</tbody>
+        </table>
+      </div>` : ''}
     </div>`;
   }).filter(Boolean).join('') || '<div class="empty">Aucune donnée pour cette période.</div>';
 }
 
+// ===== LOGO HEADER =====
+function uploadHeaderLogo(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const b64 = e.target.result;
+    localStorage.setItem('ft_header_logo', b64);
+    _applyHeaderLogo(b64);
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+function _applyHeaderLogo(b64) {
+  const wrap = document.getElementById('header-icon-wrap');
+  if (!wrap) return;
+  if (b64) {
+    wrap.innerHTML = `<img src="${b64}" alt="logo">`;
+  } else {
+    wrap.textContent = '🚗';
+  }
+}
+
 // ===== RÉINITIALISATION =====
 function reinitialiser() {
-  if (!confirm('Réinitialiser l\'application ?\n\nToutes les données seront supprimées :\n• Véhicules\n• Trajets\n• Carburant\n• Routes personnalisées\n• Prix du litre\n\nCette action est irréversible.')) return;
-  if (!confirm('Confirmez-vous la réinitialisation complète ?\nToutes les données seront définitivement perdues.')) return;
-  ['voitures','trajets','carburants','custom_routes','prix_gasoil','prix_essence'].forEach(k => localStorage.removeItem(k));
-  ['prix-gasoil-litre','prix-essence-litre','cfg-prix-gasoil','cfg-prix-essence'].forEach(id => {
-    const el = document.getElementById(id); if (el) el.value = '';
-  });
-  document.getElementById('t-date').value = new Date().toISOString().slice(0,10);
-  document.getElementById('c-date').value = new Date().toISOString().slice(0,10);
-  refreshAll();
-  alert('✅ Application réinitialisée avec succès.');
+  if (!confirm('⚠️ RÉINITIALISATION COMPLÈTE\n\nToutes les données seront définitivement supprimées :\n• Véhicules, trajets, carburant\n• Clients, contrats\n• Chauffeurs, documents\n• Réparations, revenus, karama\n• Toutes les photos\n• Licence et compte\n\nL\'application redeviendra comme neuve.\nCette action est IRRÉVERSIBLE.')) return;
+  if (!confirm('Dernière confirmation :\nSupprimer TOUTES les données et la licence ?')) return;
+  localStorage.clear();
+  location.reload();
 }
 
 // ===== CONFIG / ROUTES PERSO =====
@@ -2798,9 +3000,8 @@ function addClient() {
   const prenom = document.getElementById('cl-prenom').value.trim();
   const tel    = document.getElementById('cl-tel').value.trim();
   if (!nom || !tel) return alert('Nom et téléphone obligatoires.');
-  const id = Date.now();
-  const cl = {
-    id, nom, prenom, tel,
+  const fields = {
+    nom, prenom, tel,
     ddn:       document.getElementById('cl-ddn').value,
     cin:       document.getElementById('cl-cin').value.trim(),
     email:     document.getElementById('cl-email').value.trim(),
@@ -2810,14 +3011,19 @@ function addClient() {
     permisExp: document.getElementById('cl-permis-exp').value,
     note:      document.getElementById('cl-note').value.trim(),
   };
-  const list = getClients(); list.unshift(cl); saveClients(list);
+  const list = getClients();
+  if (_editing.client) {
+    const idx = list.findIndex(c => c.id === _editing.client);
+    if (idx >= 0) { list[idx] = { ...list[idx], ...fields }; saveClients(list); }
+    if (_clPhotoTemp) { localStorage.setItem('ft_clphoto_' + _editing.client, _clPhotoTemp); _clPhotoTemp = null; }
+    _clearEditMode('client','btn-save-client','btn-cancel-client','Enregistrer le client');
+    _resetFormClient(); populateSelects(); renderClients(); return;
+  }
+  const id = Date.now();
+  list.unshift({ id, ...fields }); saveClients(list);
   if (_clPhotoTemp) { localStorage.setItem('ft_clphoto_' + id, _clPhotoTemp); _clPhotoTemp = null; }
-  ['cl-nom','cl-prenom','cl-tel','cl-ddn','cl-cin','cl-email','cl-adresse',
-   'cl-permis-num','cl-permis-exp','cl-note'].forEach(i => document.getElementById(i).value = '');
-  document.getElementById('cl-permis-cat').value = '';
-  document.getElementById('cl-photo-preview').innerHTML = '<div style="text-align:center;color:var(--muted);font-size:0.58rem;line-height:1.5;padding:4px;"><div style="font-size:1.3rem">👤</div>Photo</div>';
-  populateSelects();
-  renderClients();
+  _resetFormClient();
+  populateSelects(); renderClients();
   alert('Client enregistré !');
 }
 
@@ -2858,7 +3064,8 @@ function renderClients() {
           ${enCours ? `<span class="statut-badge en-cours">🔵 ${enCours} en cours</span>` : ''}
           ${nbContr ? `<span style="font-size:0.7rem;color:var(--muted)">${nbContr} contrat${nbContr>1?'s':''}</span>` : ''}
           <button class="btn btn-muted btn-sm" onclick="newContratForClient(${c.id})">📋 Louer</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteClient(${c.id})">✕</button>
+          <button class="btn btn-muted btn-sm" onclick="editClient(${c.id})" title="Modifier">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteClient(${c.id})" title="Supprimer">✕</button>
         </div>
       </div>
       ${(c.adresse||c.email||c.permisNum||c.ddn) ? `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px 16px;">
@@ -2943,6 +3150,13 @@ function addContrat() {
   const tarif = parseFloat(document.getElementById('ct-tarif').value);
   if (!cid || !vid || !dep || !ret || !tarif) return alert('Client, voiture, dates et tarif/jour obligatoires.');
   if (dep > ret) return alert('La date de retour doit être après la date de départ.');
+  // Block if vehicle has active (en_cours/reserve) contract overlapping with new dates
+  const conflict = getContrats().find(c =>
+    c.voitureId === vid &&
+    (c.statut === 'en_cours' || c.statut === 'reserve') &&
+    dep <= c.datePrevRetour && ret >= c.dateDepart
+  );
+  if (conflict) return alert(`❌ Tsy azo atao!\nNy fiara dia efa manana contrat miasa (${conflict.ref}) ka mifarana ${conflict.datePrevRetour}.\nKlôtura aloha ny contrat miasa vao mampiditra vaovao.`);
   const nb   = _contratNbJours(dep, ret);
   const ct   = {
     id: Date.now(), ref: _genRef(),
@@ -3125,6 +3339,23 @@ function closeContrat(ctId) {
     const vl = getVoitures();
     const vi = vl.findIndex(v => v.id === list[idx].voitureId);
     if (vi >= 0 && km > vl[vi].km) { vl[vi].km = km; DB.set('voitures', vl); }
+  }
+  // Auto-karama chauffeur
+  if (list[idx].chauffeurId) {
+    const chauf = getChauffeurs().find(c => String(c.id) === String(list[idx].chauffeurId));
+    if (chauf && chauf.tarifKarama > 0) {
+      const nbJ = list[idx].nbJours || _contratNbJours(list[idx].dateDepart, date);
+      const montantKar = chauf.tarifKarama * nbJ;
+      const klist = getKarama();
+      klist.push({
+        id: Date.now(), voitureId: list[idx].voitureId,
+        chauffeurId: chauf.id, chauffeur: chauf.nom,
+        date: date, montant: montantKar, periode: 'contrat',
+        note: `Auto — ${list[idx].ref} (${nbJ}j × ${fAr(chauf.tarifKarama)}/j)`,
+        contratId: ctId
+      });
+      saveKarama(klist);
+    }
   }
   closeRetour();
   refreshContrats();
@@ -3362,10 +3593,15 @@ function addRevenu() {
   const desc = document.getElementById('rev-desc').value.trim();
   if (!vid || !date || !mont) return alert('Voiture, date et montant obligatoires.');
   const list = getRevenus();
+  if (_editing.revenu) {
+    const idx = list.findIndex(r => r.id === _editing.revenu);
+    if (idx >= 0) { list[idx] = { ...list[idx], voitureId: vid, date, montant: mont, type, description: desc }; saveRevenus(list); }
+    _clearEditMode('revenu','btn-save-revenu','btn-cancel-revenu','Enregistrer le revenu');
+    _resetFormRevenu(); renderFinance(); return;
+  }
   list.unshift({ id: Date.now(), voitureId: vid, date, montant: mont, type, description: desc });
   saveRevenus(list);
-  ['rev-montant','rev-desc'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('rev-voiture').value = '';
+  _resetFormRevenu();
   renderFinance();
   alert('Revenu enregistré !');
 }
@@ -3385,11 +3621,15 @@ function addKarama() {
   const note = document.getElementById('kar-note').value.trim();
   if (!vid || !nom || !date || !mont) return alert('Voiture, chauffeur, date et montant obligatoires.');
   const list = getKarama();
+  if (_editing.karama) {
+    const idx = list.findIndex(k => k.id === _editing.karama);
+    if (idx >= 0) { list[idx] = { ...list[idx], voitureId: vid, chauffeur: nom, date, montant: mont, periode: per, note }; saveKarama(list); }
+    _clearEditMode('karama','btn-save-karama','btn-cancel-karama','Enregistrer la karama');
+    _resetFormKarama(); renderFinance(); return;
+  }
   list.unshift({ id: Date.now(), voitureId: vid, chauffeur: nom, date, montant: mont, periode: per, note });
   saveKarama(list);
-  ['kar-montant','kar-note'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('kar-voiture').value = '';
-  document.getElementById('kar-chauffeur').innerHTML = '<option value="">-- Choisir --</option>';
+  _resetFormKarama();
   renderFinance();
   alert('Karama enregistrée !');
 }
@@ -3478,7 +3718,8 @@ function renderFinance() {
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;margin-left:8px">
           <strong style="color:var(--success)">${fAr(r.montant)}</strong>
-          <button class="btn btn-danger btn-sm" onclick="deleteRevenu(${r.id})">✕</button>
+          <button class="btn btn-muted btn-sm" onclick="editRevenu(${r.id})" title="Modifier">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteRevenu(${r.id})" title="Supprimer">✕</button>
         </div>
       </div>`).join('')
     : '<div class="empty">Aucun revenu pour cette période</div>';
@@ -3493,7 +3734,8 @@ function renderFinance() {
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;margin-left:8px">
           <strong style="color:var(--danger)">${fAr(k.montant)}</strong>
-          <button class="btn btn-danger btn-sm" onclick="deleteKarama(${k.id})">✕</button>
+          <button class="btn btn-muted btn-sm" onclick="editKarama(${k.id})" title="Modifier">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteKarama(${k.id})" title="Supprimer">✕</button>
         </div>
       </div>`).join('')
     : '<div class="empty">Aucune karama pour cette période</div>';
@@ -3556,12 +3798,13 @@ function addChauffeur() {
   const nom  = document.getElementById('ch-nom').value.trim();
   const type = document.getElementById('ch-type').value;
   const tel  = document.getElementById('ch-tel').value.trim();
-  const tarif= parseFloat(document.getElementById('ch-tarif').value) || 0;
+  const tarif      = parseFloat(document.getElementById('ch-tarif').value) || 0;
+  const tarifKarama= parseFloat(document.getElementById('ch-tarif-karama').value) || 0;
   const deb  = document.getElementById('ch-debut').value;
   if (!vid || !nom) return alert('Voiture et nom du chauffeur obligatoires.');
   const id = Date.now();
   const ch = {
-    id, voitureId: vid, nom, type, tel, tarif, dateDebut: deb,
+    id, voitureId: vid, nom, type, tel, tarif, tarifKarama, dateDebut: deb,
     dateNaissance: document.getElementById('ch-ddn').value,
     cin:           document.getElementById('ch-cin').value.trim(),
     adresse:       document.getElementById('ch-adresse').value.trim(),
@@ -3571,16 +3814,19 @@ function addChauffeur() {
     permisExp:     document.getElementById('ch-permis-exp').value,
   };
   const list = getChauffeurs();
+  if (_editing.chauffeur) {
+    const idx = list.findIndex(c => c.id === _editing.chauffeur);
+    if (idx >= 0) { list[idx] = { ...list[idx], ...ch, id: _editing.chauffeur }; saveChauffeurs(list); }
+    if (_chPhotoTemp)      { localStorage.setItem('ft_cphoto_'  + _editing.chauffeur, _chPhotoTemp);      _chPhotoTemp = null; }
+    if (_chPermisPhotoTemp){ localStorage.setItem('ft_cpermis_' + _editing.chauffeur, _chPermisPhotoTemp); _chPermisPhotoTemp = null; }
+    _clearEditMode('chauffeur','btn-save-chauffeur','btn-cancel-chauffeur','Enregistrer le chauffeur');
+    _resetFormChauffeur(); renderChauffeurs(); checkDocumentAlerts(); return;
+  }
   list.push(ch);
   saveChauffeurs(list);
   if (_chPhotoTemp)      { localStorage.setItem('ft_cphoto_' + id, _chPhotoTemp); _chPhotoTemp = null; }
   if (_chPermisPhotoTemp){ localStorage.setItem('ft_cpermis_' + id, _chPermisPhotoTemp); _chPermisPhotoTemp = null; }
-  ['ch-nom','ch-tel','ch-tarif','ch-debut','ch-ddn','ch-cin','ch-adresse',
-   'ch-permis-num','ch-permis-obtention','ch-permis-exp'].forEach(i => document.getElementById(i).value = '');
-  document.getElementById('ch-voiture').value = '';
-  document.getElementById('ch-permis-cat').value = '';
-  document.getElementById('ch-photo-preview').innerHTML = '<div style="text-align:center;color:var(--muted);font-size:0.6rem;line-height:1.5;padding:6px;"><div style="font-size:1.4rem">👤</div>Photo</div>';
-  document.getElementById('ch-permis-photo-status').textContent = '';
+  _resetFormChauffeur();
   renderChauffeurs();
   checkDocumentAlerts();
   alert('Chauffeur enregistré !');
@@ -3648,13 +3894,16 @@ function renderChauffeurs() {
                 <strong style="font-size:0.95rem">${c.nom}</strong>
                 <span class="badge-${c.type}" style="margin-left:6px">${c.type === 'principal' ? '⭐ Principal' : '🔄 Remplaçant'}</span>
               </div>
-              <button class="btn btn-danger btn-sm" onclick="deleteChauffeur(${c.id})">✕</button>
+              <button class="btn btn-muted btn-sm" onclick="editChauffeur(${c.id})" title="Modifier">✏️</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteChauffeur(${c.id})" title="Supprimer">✕</button>
             </div>
             ${c.tel ? `<div class="ch-info-row">📱 <strong>${c.tel}</strong></div>` : ''}
             ${c.dateNaissance ? `<div class="ch-info-row">🎂 Né(e) le <strong>${c.dateNaissance}</strong></div>` : ''}
             ${c.cin ? `<div class="ch-info-row">🪪 CIN : <strong>${c.cin}</strong></div>` : ''}
             ${c.adresse ? `<div class="ch-info-row">📍 <strong>${c.adresse}</strong></div>` : ''}
             ${c.dateDebut ? `<div class="ch-info-row">📅 En poste depuis : <strong>${c.dateDebut}</strong></div>` : ''}
+            ${c.tarif ? `<div class="ch-info-row">🚗 Tarif location : <strong style="color:var(--success)">${fAr(c.tarif)}/jour</strong></div>` : ''}
+            ${c.tarifKarama ? `<div class="ch-info-row">💵 Karama : <strong style="color:var(--primary)">${fAr(c.tarifKarama)}/jour</strong></div>` : ''}
           </div>
         </div>
         ${(c.permisNum || c.permisCat || c.permisObt || c.permisExp) ? `
@@ -3705,10 +3954,15 @@ function addDocument() {
   const note  = document.getElementById('doc-note').value.trim();
   if (!vid || !exp) return alert('Voiture et date d\'expiration obligatoires.');
   const docs = getDocuments();
+  if (_editing.document) {
+    const idx = docs.findIndex(d => d.id === _editing.document);
+    if (idx >= 0) { docs[idx] = { ...docs[idx], voitureId: vid, type, label: label || DOC_LABELS[type], dateExpiration: exp, note }; saveDocuments(docs); }
+    _clearEditMode('document','btn-save-document','btn-cancel-document','Enregistrer le document');
+    _resetFormDocument(); renderDocuments(); checkDocumentAlerts(); return;
+  }
   docs.push({ id: Date.now(), voitureId: vid, type, label: label || DOC_LABELS[type], dateExpiration: exp, note });
   saveDocuments(docs);
-  ['doc-label','doc-expiration','doc-note'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('doc-voiture').value = '';
+  _resetFormDocument();
   renderDocuments();
   checkDocumentAlerts();
   alert('Document enregistré !');
@@ -3741,7 +3995,8 @@ function renderDocuments() {
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;margin-left:8px">
           <span class="doc-status-badge ${st.cls}">${st.label}</span>
-          <button class="btn btn-danger btn-sm" onclick="deleteDocument(${d.id})">✕</button>
+          <button class="btn btn-muted btn-sm" onclick="editDocument(${d.id})" title="Modifier">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteDocument(${d.id})" title="Supprimer">✕</button>
         </div>
       </div>
       <div style="font-size:0.72rem;color:var(--muted)">
@@ -3792,21 +4047,33 @@ function checkDocumentAlerts() {
 function getReparations() { return DB.get('ft_reparations'); }
 function saveReparations(d) { DB.set('ft_reparations', d); }
 
+function toggleRepKm() {
+  const t = document.getElementById('rep-type').value;
+  const w = document.getElementById('rep-km-prochain-wrap');
+  if (w) w.style.display = (t === 'entretien_periodique' || t === 'vidange') ? '' : 'none';
+}
+
 function addReparation() {
   const vid  = parseInt(document.getElementById('rep-voiture').value);
   const date = document.getElementById('rep-date').value;
   const desc = document.getElementById('rep-desc').value.trim();
   const cout = parseFloat(document.getElementById('rep-cout').value);
   const tid  = document.getElementById('rep-trajet').value;
+  const type = document.getElementById('rep-type').value || 'reparation';
+  const kmProchain = parseFloat(document.getElementById('rep-km-prochain').value) || null;
   if (!vid || !date || !desc || !cout) return alert('Voiture, date, description et coût obligatoires.');
   const list = getReparations();
-  list.unshift({ id: Date.now(), voitureId: vid, trajetId: tid ? parseInt(tid) : null, date, description: desc, cout });
+  if (_editing.reparation) {
+    const idx = list.findIndex(r => r.id === _editing.reparation);
+    if (idx >= 0) { list[idx] = { ...list[idx], voitureId: vid, date, description: desc, cout, type, kmProchain, trajetId: tid ? parseInt(tid) : null }; saveReparations(list); }
+    _clearEditMode('reparation','btn-save-reparation','btn-cancel-reparation','Enregistrer');
+    _resetFormReparation(); renderReparations(); return;
+  }
+  list.unshift({ id: Date.now(), voitureId: vid, trajetId: tid ? parseInt(tid) : null, date, description: desc, cout, type, kmProchain });
   saveReparations(list);
-  ['rep-desc','rep-cout'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('rep-voiture').value = '';
-  document.getElementById('rep-trajet').value  = '';
+  _resetFormReparation();
   renderReparations();
-  alert('Réparation enregistrée !');
+  alert('Enregistré !');
 }
 
 function deleteReparation(id) {
@@ -3831,20 +4098,26 @@ function renderReparations() {
     <span style="font-size:0.82rem;color:var(--muted)">Total réparations (filtre actuel)</span>
     <strong style="color:var(--danger);font-size:1.05rem">${fAr(total)}</strong>
   </div>`
-  + reps.map(r => `
+  + reps.map(r => {
+    const repTypeLabel = {reparation:'🔧 Réparation',entretien:'🛠️ Entretien',entretien_periodique:'🔄 Entretien périodique',vidange:'🛢️ Vidange',pneus:'🔘 Pneus',autre:'📋 Autre'};
+    const rt = r.type || 'reparation';
+    return `
     <div class="rep-card">
       <div class="rep-header">
         <div>
           <div style="font-size:0.78rem;color:var(--muted);margin-bottom:2px">${r.date} — <strong style="color:var(--text)">${vMap[r.voitureId]||'?'}</strong></div>
-          <div style="font-size:0.9rem">${r.description}</div>
-          ${r.trajetId ? `<div style="font-size:0.7rem;color:var(--info);margin-top:2px">🔗 Lié au trajet #${r.trajetId}</div>` : ''}
+          <div style="font-size:0.9rem;margin-bottom:3px"><span class="rep-type-badge rtype-${rt}">${repTypeLabel[rt]||rt}</span>${r.description}</div>
+          ${r.kmProchain ? `<div style="font-size:0.7rem;color:var(--info);margin-top:1px">🔢 Prochain entretien à ${r.kmProchain.toLocaleString()} km</div>` : ''}
+          ${r.trajetId ? `<div style="font-size:0.7rem;color:var(--info);margin-top:1px">🔗 Lié au trajet #${r.trajetId}</div>` : ''}
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;margin-left:8px">
           <span class="rep-cout">${fAr(r.cout)}</span>
-          <button class="btn btn-danger btn-sm" onclick="deleteReparation(${r.id})">✕</button>
+          <button class="btn btn-muted btn-sm" onclick="editReparation(${r.id})" title="Modifier">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteReparation(${r.id})" title="Supprimer">✕</button>
         </div>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 // ===== TRIP DETAIL =====
@@ -3974,7 +4247,353 @@ function populateSelects() {
 }
 
 // ===== REFRESH =====
+// ===== EDIT MODE HELPERS =====
+const _editing = {};
+
+function _setEditMode(key, saveId, cancelId, saveLabel) {
+  const sb = document.getElementById(saveId);
+  const cb = document.getElementById(cancelId);
+  if (sb) sb.textContent = '✏️ ' + saveLabel;
+  if (sb) sb.style.background = 'var(--orange)';
+  if (cb) cb.style.display = '';
+}
+function _clearEditMode(key, saveId, cancelId, origLabel) {
+  delete _editing[key];
+  const sb = document.getElementById(saveId);
+  const cb = document.getElementById(cancelId);
+  if (sb) { sb.textContent = origLabel; sb.style.background = ''; }
+  if (cb) cb.style.display = 'none';
+}
+
+function cancelEdit(key) {
+  const cfg = {
+    voiture:    ['btn-save-voiture',    'btn-cancel-voiture',    'Enregistrer la voiture',   _resetFormVoiture],
+    carburant:  ['btn-save-carburant',  'btn-cancel-carburant',  'Enregistrer le plein',     _resetFormCarburant],
+    client:     ['btn-save-client',     'btn-cancel-client',     'Enregistrer le client',    _resetFormClient],
+    revenu:     ['btn-save-revenu',     'btn-cancel-revenu',     'Enregistrer le revenu',    _resetFormRevenu],
+    karama:     ['btn-save-karama',     'btn-cancel-karama',     'Enregistrer la karama',    _resetFormKarama],
+    chauffeur:  ['btn-save-chauffeur',  'btn-cancel-chauffeur',  'Enregistrer le chauffeur', _resetFormChauffeur],
+    document:   ['btn-save-document',  'btn-cancel-document',   'Enregistrer le document',  _resetFormDocument],
+    reparation: ['btn-save-reparation','btn-cancel-reparation',  'Enregistrer',              _resetFormReparation],
+    trajet:     ['btn-save-trajet',     'btn-cancel-trajet',     'Démarrer le trajet',       _resetFormTrajet],
+    contrat:    ['btn-save-contrat',    'btn-cancel-contrat',    'Créer le contrat',         _resetFormContrat],
+  };
+  const c = cfg[key]; if (!c) return;
+  _clearEditMode(key, c[0], c[1], c[2]);
+  if (c[3]) c[3]();
+}
+
+function _resetFormVoiture() {
+  ['v-plaque','v-conso','v-km'].forEach(i => { const el = document.getElementById(i); if(el) el.value = ''; });
+  document.getElementById('v-marque').value = '';
+  document.getElementById('v-modele').innerHTML = '<option value="">-- Choisir modèle --</option>';
+  document.getElementById('v-carburant').value = '';
+  selectFuel('');
+}
+function _resetFormCarburant() {
+  ['c-date','c-km','c-litres','c-prix','c-note'].forEach(i => { const el = document.getElementById(i); if(el) el.value = ''; });
+  document.getElementById('c-voiture').value = '';
+  const dl = document.getElementById('c-prix-litre-display'); if(dl) dl.style.display = 'none';
+}
+function _resetFormClient() {
+  ['cl-nom','cl-prenom','cl-tel','cl-ddn','cl-cin','cl-email','cl-adresse','cl-permis-num','cl-permis-exp','cl-note'].forEach(i => { const el = document.getElementById(i); if(el) el.value = ''; });
+  document.getElementById('cl-permis-cat').value = '';
+  document.getElementById('cl-photo-preview').innerHTML = '<div style="text-align:center;color:var(--muted);font-size:0.58rem;line-height:1.5;padding:4px;"><div style="font-size:1.3rem">👤</div>Photo</div>';
+}
+function _resetFormRevenu() {
+  ['rev-montant','rev-desc'].forEach(i => { const el = document.getElementById(i); if(el) el.value = ''; });
+  document.getElementById('rev-voiture').value = '';
+}
+function _resetFormKarama() {
+  ['kar-montant','kar-note'].forEach(i => { const el = document.getElementById(i); if(el) el.value = ''; });
+  document.getElementById('kar-voiture').value = '';
+  document.getElementById('kar-chauffeur').innerHTML = '<option value="">-- Choisir --</option>';
+}
+function _resetFormChauffeur() {
+  ['ch-nom','ch-tel','ch-tarif','ch-tarif-karama','ch-debut','ch-ddn','ch-cin','ch-adresse','ch-permis-num','ch-permis-obtention','ch-permis-exp'].forEach(i => { const el = document.getElementById(i); if(el) el.value = ''; });
+  document.getElementById('ch-voiture').value = '';
+  document.getElementById('ch-permis-cat').value = '';
+  document.getElementById('ch-photo-preview').innerHTML = '<div style="text-align:center;color:var(--muted);font-size:0.6rem;line-height:1.5;padding:6px;"><div style="font-size:1.4rem">👤</div>Photo</div>';
+  document.getElementById('ch-permis-photo-status').textContent = '';
+}
+function _resetFormDocument() {
+  ['doc-label','doc-expiration','doc-note'].forEach(i => { const el = document.getElementById(i); if(el) el.value = ''; });
+  document.getElementById('doc-voiture').value = '';
+}
+function _resetFormReparation() {
+  ['rep-desc','rep-cout','rep-km-prochain'].forEach(i => { const el = document.getElementById(i); if(el) el.value = ''; });
+  document.getElementById('rep-voiture').value = '';
+  document.getElementById('rep-trajet').value = '';
+  document.getElementById('rep-type').value = 'reparation';
+  toggleRepKm();
+}
+function _resetFormTrajet() {
+  ['t-km-dep','t-chauffeur','t-destination'].forEach(i => { const el = document.getElementById(i); if(el) el.value = ''; });
+  document.getElementById('t-voiture').value = '';
+}
+function _resetFormContrat() {}
+
+// ===== EDIT FUNCTIONS =====
+
+function editVoiture(id) {
+  const v = getVoitures().find(x => x.id === id); if (!v) return;
+  _editing.voiture = id;
+  showPage('voitures', document.querySelector('[onclick*=voitures]'));
+  document.getElementById('v-plaque').value   = v.plaque || '';
+  document.getElementById('v-conso').value    = v.conso != null ? v.conso : '';
+  document.getElementById('v-km').value       = v.km != null ? v.km : '';
+  document.getElementById('v-carburant').value = v.carburant || '';
+  selectFuel(v.carburant || '');
+  // Marque & modele
+  initMarqueSelect();
+  document.getElementById('v-marque').value = v.marque || '';
+  updateModeles();
+  setTimeout(() => { document.getElementById('v-modele').value = v.modele || ''; }, 50);
+  _setEditMode('voiture','btn-save-voiture','btn-cancel-voiture','Modifier la voiture');
+  document.getElementById('v-plaque').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+function editCarburant(id) {
+  const c = getCarburants().find(x => x.id === id); if (!c) return;
+  _editing.carburant = id;
+  showPage('carburant', document.querySelector('[onclick*=carburant]'));
+  document.getElementById('c-date').value    = c.date || '';
+  document.getElementById('c-voiture').value = c.voitureId || '';
+  document.getElementById('c-km').value      = c.km || '';
+  document.getElementById('c-litres').value  = c.litres || '';
+  document.getElementById('c-prix').value    = c.prix || '';
+  document.getElementById('c-note').value    = c.note || '';
+  _setEditMode('carburant','btn-save-carburant','btn-cancel-carburant','Modifier le plein');
+  document.getElementById('c-date').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+function editClient(id) {
+  const c = getClients().find(x => x.id === id); if (!c) return;
+  _editing.client = id;
+  showPage('clients', document.querySelector('[onclick*=clients]'));
+  document.getElementById('cl-nom').value        = c.nom || '';
+  document.getElementById('cl-prenom').value     = c.prenom || '';
+  document.getElementById('cl-tel').value        = c.tel || '';
+  document.getElementById('cl-ddn').value        = c.ddn || '';
+  document.getElementById('cl-cin').value        = c.cin || '';
+  document.getElementById('cl-email').value      = c.email || '';
+  document.getElementById('cl-adresse').value    = c.adresse || '';
+  document.getElementById('cl-permis-num').value = c.permisNum || '';
+  document.getElementById('cl-permis-cat').value = c.permisCat || '';
+  document.getElementById('cl-permis-exp').value = c.permisExp || '';
+  document.getElementById('cl-note').value       = c.note || '';
+  const photo = localStorage.getItem('ft_clphoto_' + id);
+  if (photo) document.getElementById('cl-photo-preview').innerHTML = `<img src="${photo}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">`;
+  _setEditMode('client','btn-save-client','btn-cancel-client','Modifier le client');
+  document.getElementById('cl-nom').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+function editDocument(id) {
+  const d = getDocuments().find(x => x.id === id); if (!d) return;
+  _editing.document = id;
+  showPage('documents', document.querySelector('[onclick*=documents]'));
+  document.getElementById('doc-voiture').value    = d.voitureId || '';
+  document.getElementById('doc-type').value       = d.type || '';
+  document.getElementById('doc-label').value      = d.label || '';
+  document.getElementById('doc-expiration').value = d.dateExpiration || '';
+  document.getElementById('doc-note').value       = d.note || '';
+  _setEditMode('document','btn-save-document','btn-cancel-document','Modifier le document');
+  document.getElementById('doc-voiture').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+function editReparation(id) {
+  const r = getReparations().find(x => x.id === id); if (!r) return;
+  _editing.reparation = id;
+  showPage('reparations', document.querySelector('[onclick*=reparations]'));
+  document.getElementById('rep-voiture').value    = r.voitureId || '';
+  document.getElementById('rep-date').value       = r.date || '';
+  document.getElementById('rep-type').value       = r.type || 'reparation';
+  document.getElementById('rep-desc').value       = r.description || '';
+  document.getElementById('rep-cout').value       = r.cout || '';
+  document.getElementById('rep-km-prochain').value= r.kmProchain || '';
+  document.getElementById('rep-trajet').value     = r.trajetId || '';
+  toggleRepKm();
+  _setEditMode('reparation','btn-save-reparation','btn-cancel-reparation','Modifier');
+  document.getElementById('rep-voiture').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+function editRevenu(id) {
+  const r = getRevenus().find(x => x.id === id); if (!r) return;
+  _editing.revenu = id;
+  showPage('finance', document.querySelector('[onclick*=finance]'));
+  document.getElementById('rev-voiture').value = r.voitureId || '';
+  document.getElementById('rev-date').value    = r.date || '';
+  document.getElementById('rev-type').value    = r.type || '';
+  document.getElementById('rev-montant').value = r.montant || '';
+  document.getElementById('rev-desc').value    = r.description || '';
+  _setEditMode('revenu','btn-save-revenu','btn-cancel-revenu','Modifier le revenu');
+  document.getElementById('rev-voiture').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+function editKarama(id) {
+  const k = getKarama().find(x => x.id === id); if (!k) return;
+  _editing.karama = id;
+  showPage('finance', document.querySelector('[onclick*=finance]'));
+  document.getElementById('kar-voiture').value = k.voitureId || '';
+  _updateKaramaSelect();
+  setTimeout(() => { document.getElementById('kar-chauffeur').value = k.chauffeur || ''; }, 50);
+  document.getElementById('kar-date').value    = k.date || '';
+  document.getElementById('kar-montant').value = k.montant || '';
+  document.getElementById('kar-periode').value = k.periode || '';
+  document.getElementById('kar-note').value    = k.note || '';
+  _setEditMode('karama','btn-save-karama','btn-cancel-karama','Modifier la karama');
+  document.getElementById('kar-voiture').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+function editChauffeur(id) {
+  const c = getChauffeurs().find(x => x.id === id); if (!c) return;
+  _editing.chauffeur = id;
+  showPage('chauffeurs', document.querySelector('[onclick*=chauffeurs]'));
+  document.getElementById('ch-nom').value              = c.nom || '';
+  document.getElementById('ch-tel').value              = c.tel || '';
+  document.getElementById('ch-ddn').value              = c.dateNaissance || '';
+  document.getElementById('ch-cin').value              = c.cin || '';
+  document.getElementById('ch-adresse').value          = c.adresse || '';
+  document.getElementById('ch-tarif').value            = c.tarif || '';
+  document.getElementById('ch-tarif-karama').value     = c.tarifKarama || '';
+  document.getElementById('ch-debut').value            = c.dateDebut || '';
+  document.getElementById('ch-voiture').value          = c.voitureId || '';
+  document.getElementById('ch-type').value             = c.type || 'principal';
+  document.getElementById('ch-permis-num').value       = c.permisNum || '';
+  document.getElementById('ch-permis-cat').value       = c.permisCat || '';
+  document.getElementById('ch-permis-obtention').value = c.permisObt || '';
+  document.getElementById('ch-permis-exp').value       = c.permisExp || '';
+  const photo = localStorage.getItem('ft_cphoto_' + id);
+  if (photo) document.getElementById('ch-photo-preview').innerHTML = `<img src="${photo}" style="width:100%;height:100%;object-fit:cover;">`;
+  _setEditMode('chauffeur','btn-save-chauffeur','btn-cancel-chauffeur','Modifier le chauffeur');
+  document.getElementById('ch-nom').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+function editTrajet(id) {
+  const t = getTrajets().find(x => x.id === id); if (!t) return;
+  _editing.trajet = id;
+  showPage('trajets', document.querySelector('[onclick*=trajets]'));
+  document.getElementById('t-date').value        = t.dateDep || t.date || '';
+  document.getElementById('t-voiture').value     = t.voitureId || '';
+  onVoitureChange();
+  document.getElementById('t-km-dep').value      = t.kmDep || '';
+  document.getElementById('t-chauffeur').value   = t.chauffeur || '';
+  document.getElementById('t-destination').value = t.destination || '';
+  // Make sure save btn exists
+  const sb = document.getElementById('btn-save-trajet');
+  const cb = document.getElementById('btn-cancel-trajet');
+  if (sb) { sb.textContent = '✏️ Modifier le trajet'; sb.style.background = 'var(--orange)'; }
+  if (cb) cb.style.display = '';
+  document.getElementById('t-date').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+// ===== AUTO-TERMINATE EXPIRED CONTRACTS =====
+function autoTerminateContrats() {
+  const today = new Date().toISOString().slice(0,10);
+  const list  = getContrats();
+  let changed = false;
+  list.forEach(ct => {
+    if (ct.statut === 'en_cours' && ct.datePrevRetour < today) {
+      ct.statut = 'termine';
+      ct.dateRetourReel = ct.datePrevRetour;
+      changed = true;
+    }
+  });
+  if (changed) saveContrats(list);
+}
+
+// ===== ROUTES DATALIST =====
+function populateRoutesDatalist() {
+  const dl = document.getElementById('routes-datalist');
+  if (!dl || !window.ROUTES_BUILTIN) return;
+  dl.innerHTML = ROUTES_BUILTIN.map(r => `<option value="${r.from} → ${r.to} (${r.km} km)">`).join('');
+}
+
+// ===== RÉSUMÉ FINANCIER VOITURE =====
+function showVehicleFinResume(vid) {
+  const voitures  = getVoitures();
+  const v = voitures.find(x => x.id === vid); if (!v) return;
+  const contrats  = getContrats().filter(c => c.voitureId === vid);
+  const reps      = getReparations().filter(r => r.voitureId === vid);
+  const karamas   = getKarama().filter(k => k.voitureId === vid);
+  const revenus   = getRevenus().filter(r => r.voitureId === vid);
+  const docs      = getDocuments().filter(d => d.voitureId === vid);
+  const trajets   = getTrajets().filter(t => String(t.voitureId) === String(vid));
+
+  const totalLocation = contrats.filter(c => c.statut === 'termine').reduce((s,c) => s + (c.montantReel != null ? c.montantReel : c.montantPrev), 0);
+  const totalRevenus  = revenus.reduce((s,r) => s+(r.montant||0), 0);
+  const totalRep      = reps.reduce((s,r) => s+(r.cout||0), 0);
+  const totalKar      = karamas.reduce((s,k) => s+(k.montant||0), 0);
+  const totalGasoil   = trajets.reduce((s,t) => s+(t.montantLany||0), 0);
+  const totalEntrees  = totalLocation + totalRevenus;
+  const totalSorties  = totalRep + totalKar;
+  const netTotal      = totalEntrees - totalSorties;
+  const totalKm       = trajets.reduce((s,t) => s+(t.km||0), 0);
+  const nbContrats    = contrats.filter(c => c.statut === 'termine').length;
+
+  // Doc validity
+  const assur  = docs.find(d => d.type === 'assurance');
+  const visite = docs.find(d => d.type === 'visite_technique');
+  function dBadge(d, lbl) {
+    if (!d) return `<span style="color:var(--muted)">${lbl}: —</span>`;
+    const st = docStatus(d.dateExpiration);
+    const ic = st.cls === 'ok' ? '✅' : st.cls === 'warn' ? '⚠️' : '🚨';
+    const cl = st.cls === 'ok' ? 'var(--success)' : st.cls === 'warn' ? 'var(--orange)' : 'var(--danger)';
+    return `<span style="color:${cl}">${ic} ${lbl}: ${d.dateExpiration} <small>(${st.label})</small></span>`;
+  }
+
+  // Répartition dépenses par type
+  const repByType = {};
+  reps.forEach(r => { const t = r.type||'reparation'; repByType[t]=(repByType[t]||0)+(r.cout||0); });
+  const repTypeLabel = {reparation:'🔧 Réparation',entretien:'🛠️ Entretien',entretien_periodique:'🔄 Entretien périodique',vidange:'🛢️ Vidange',pneus:'🔘 Pneus',autre:'📋 Autre'};
+
+  document.getElementById('vfin-title').textContent = `${v.plaque} — ${v.marque||''} ${v.modele||''}`;
+  document.getElementById('vfin-kpi-row').innerHTML = `
+    <div class="vfin-kpi"><div class="vk-val" style="color:var(--success)">${fAr(totalEntrees)}</div><div class="vk-lbl">Total entrées</div></div>
+    <div class="vfin-kpi"><div class="vk-val" style="color:var(--danger)">${fAr(totalSorties)}</div><div class="vk-lbl">Total sorties</div></div>
+    <div class="vfin-kpi"><div class="vk-val" style="color:${netTotal>=0?'var(--success)':'var(--danger)'}">${netTotal>=0?'+':''}${fAr(netTotal)}</div><div class="vk-lbl">Résultat net</div></div>`;
+
+  document.getElementById('vfin-body').innerHTML = `
+    <div class="vfin-section">
+      <div class="vfin-section-title">📅 Validité documents</div>
+      <div style="font-size:0.83rem;display:flex;flex-direction:column;gap:5px;">
+        ${dBadge(assur,'Assurance')}
+        ${dBadge(visite,'Visite technique')}
+      </div>
+    </div>
+    <div class="vfin-section">
+      <div class="vfin-section-title">💵 Entrées</div>
+      <div class="vfin-row"><span>Location (contrats terminés × ${nbContrats})</span><strong style="color:var(--success)">${fAr(totalLocation)}</strong></div>
+      ${totalRevenus > 0 ? `<div class="vfin-row"><span>Autres revenus</span><strong style="color:var(--success)">${fAr(totalRevenus)}</strong></div>` : ''}
+      <div class="vfin-total"><span>Total entrées</span><span style="color:var(--success)">${fAr(totalEntrees)}</span></div>
+    </div>
+    <div class="vfin-section">
+      <div class="vfin-section-title">💸 Sorties</div>
+      ${Object.entries(repByType).map(([t,m]) => `<div class="vfin-row"><span>${repTypeLabel[t]||t}</span><strong style="color:var(--danger)">${fAr(m)}</strong></div>`).join('')}
+      ${totalKar > 0 ? `<div class="vfin-row"><span>👤 Karama chauffeurs</span><strong style="color:var(--danger)">${fAr(totalKar)}</strong></div>` : ''}
+      <div class="vfin-total"><span>Total sorties (hors carburant)</span><span style="color:var(--danger)">${fAr(totalSorties)}</span></div>
+    </div>
+    ${totalGasoil > 0 ? `
+    <div class="vfin-section">
+      <div class="vfin-section-title">⛽ Carburant</div>
+      <div class="vfin-row"><span>Coût gasoil (calculé trajets)</span><strong style="color:var(--orange)">${fAr(Math.round(totalGasoil))}</strong></div>
+    </div>` : ''}
+    <div class="vfin-section">
+      <div class="vfin-section-title">📍 Kilométrage</div>
+      <div class="vfin-row"><span>Total parcouru (trajets enregistrés)</span><strong>${fNum(totalKm)} km</strong></div>
+      <div class="vfin-row"><span>Km compteur actuel</span><strong>${fNum(v.km)} km</strong></div>
+    </div>`;
+
+  document.getElementById('vfin-overlay').classList.add('open');
+}
+
+function closeVfinModal() {
+  document.getElementById('vfin-overlay').classList.remove('open');
+}
+
+
 function refreshAll() {
+  autoTerminateContrats();
   populateSelects();
   renderVoitures();
   renderTrajets();
@@ -3991,6 +4610,7 @@ function refreshAll() {
   renderDocuments();
   renderReparations();
   checkDocumentAlerts();
+  populateRoutesDatalist();
 }
 
 // ===== INIT =====
@@ -4008,6 +4628,7 @@ document.getElementById('fin-fin').value   = new Date().toISOString().slice(0,10
 document.getElementById('r-debut').value = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
 document.getElementById('r-fin').value = new Date().toISOString().slice(0,10);
 refreshAll();
+_applyHeaderLogo(localStorage.getItem('ft_header_logo'));
 </script>
 
 <!-- ===== MODAL TERMINER TRAJET ===== -->
