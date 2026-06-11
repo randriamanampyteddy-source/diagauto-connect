@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../../components/AdminLayout'
 import api from '../../api/axios'
 import { toast } from 'react-toastify'
-import { MdAdd, MdDelete, MdPrint } from 'react-icons/md'
+import { MdAdd, MdDelete, MdPrint, MdSend } from 'react-icons/md'
+import { getWhatsAppWarning, ouvrirWhatsAppManuel } from '../../utils/whatsapp'
 
 const statusColors = {
   brouillon: 'bg-gray-100 text-gray-600',
@@ -21,6 +22,7 @@ const Proforma = () => {
   const [clients, setClients] = useState([])
   const [vehicules, setVehicules] = useState([])
   const [modal, setModal] = useState(false)
+  const [sendingId, setSendingId] = useState(null)
   const [form, setForm] = useState({ client_id: '', vehicule_id: '', date_proforma: '', date_validite: '', tva: 20, notes: '', lignes: [ligneVide()] })
 
   const load = () => {
@@ -54,6 +56,22 @@ const Proforma = () => {
     } catch { toast.error('Erreur') }
   }
 
+  const envoyerProforma = async (proforma) => {
+    setSendingId(proforma.id)
+    try {
+      const { data } = await api.post(`/admin/proformas/${proforma.id}/envoyer`)
+      const warning = getWhatsAppWarning(data.whatsapp, 'Proforma prepare')
+      if (warning) toast.warning(warning)
+      else toast.success('Proforma envoye sur WhatsApp')
+      ouvrirWhatsAppManuel(data.whatsapp)
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Envoi WhatsApp impossible')
+    } finally {
+      setSendingId(null)
+    }
+  }
+
   return (
     <AdminLayout>
       <div className="flex items-center justify-between mb-6">
@@ -84,9 +102,18 @@ const Proforma = () => {
                 <td className="px-4 py-3 font-semibold">{Number(p.montant_ttc).toLocaleString()} Ar</td>
                 <td className="px-4 py-3"><span className={`badge ${statusColors[p.statut]}`}>{statusLabels[p.statut]}</span></td>
                 <td className="px-4 py-3">
-                  <button onClick={() => navigate(`/documents/proforma/${p.id}/imprimer`)} className="bg-primary hover:bg-blue-900 text-white text-xs py-1 px-2 rounded-xl flex items-center gap-1">
-                    <MdPrint size={13} /> Voir
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={() => navigate(`/documents/proforma/${p.id}/imprimer`)} className="bg-primary hover:bg-blue-900 text-white text-xs py-1 px-2 rounded-xl flex items-center gap-1">
+                      <MdPrint size={13} /> Voir
+                    </button>
+                    <button
+                      onClick={() => envoyerProforma(p)}
+                      disabled={sendingId === p.id}
+                      className="bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white text-xs py-1 px-2 rounded-xl flex items-center gap-1"
+                    >
+                      <MdSend size={13} /> {sendingId === p.id ? 'Envoi...' : 'WhatsApp'}
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

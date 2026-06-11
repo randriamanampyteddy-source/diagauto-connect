@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { envoyerWhatsAppClient } = require('../services/whatsappService');
 
 const MAX_PAR_JOUR = 2;
 let messagesTableReady = false;
@@ -90,6 +91,12 @@ const ajouterMessageRdv = async ({ rendezvousId, clientId, expediteur, message }
       expediteur !== 'client',
     ]
   );
+};
+
+const getMessageWhatsAppRdv = (rdv) => {
+  const note = rdv.notes_admin ? `\nMessage admin : ${rdv.notes_admin}` : '';
+  const motif = rdv.motif ? `\nMotif : ${rdv.motif}` : '';
+  return `DiagAuto Mada\nRendez-vous atelier.\nClient : ${rdv.prenom || ''} ${rdv.nom || ''}\nDate : ${formatDate(rdv.date_rdv)}\nHeure : ${String(rdv.heure_rdv).slice(0, 5)}\nVehicule : ${rdv.marque} ${rdv.modele} (${rdv.immatriculation})\nStatut : ${statusLabels[rdv.statut] || rdv.statut}${motif}${note}`;
 };
 
 exports.creerRdvAdmin = async (req, res) => {
@@ -357,6 +364,31 @@ exports.changerStatutRdv = async (req, res) => {
     }
 
     res.json({ message: 'Statut mis a jour' });
+  } catch (err) {
+    res.status(500).json({ message: 'Erreur serveur', error: err.message });
+  }
+};
+
+exports.envoyerRdvWhatsApp = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [[rdv]] = await db.query(
+      `SELECT r.client_id, r.date_rdv, r.heure_rdv, r.motif, r.statut, r.notes_admin,
+              c.nom, c.prenom, v.marque, v.modele, v.immatriculation
+       FROM rendezvous r
+       JOIN clients c ON r.client_id = c.id
+       JOIN vehicules v ON r.vehicule_id = v.id
+       WHERE r.id = ?`,
+      [id]
+    );
+    if (!rdv) return res.status(404).json({ message: 'Rendez-vous introuvable' });
+
+    const whatsapp = await envoyerWhatsAppClient({
+      clientId: rdv.client_id,
+      type: 'rendezvous_envoi',
+      message: getMessageWhatsAppRdv(rdv),
+    });
+    res.json({ message: 'Rendez-vous pret a envoyer', whatsapp });
   } catch (err) {
     res.status(500).json({ message: 'Erreur serveur', error: err.message });
   }

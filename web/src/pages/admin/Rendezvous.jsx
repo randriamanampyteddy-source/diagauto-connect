@@ -5,6 +5,7 @@ import api from '../../api/axios'
 import { toast } from 'react-toastify'
 import { MdAdd, MdMessage, MdPersonAdd, MdSearch, MdSend } from 'react-icons/md'
 import { playUrgenceSound } from '../../utils/alertSound'
+import { getWhatsAppWarning, ouvrirWhatsAppManuel } from '../../utils/whatsapp'
 
 const statusColors = {
   en_attente: 'bg-yellow-100 text-yellow-700',
@@ -29,6 +30,7 @@ const Rendezvous = () => {
   const [messagesModal, setMessagesModal] = useState(null)
   const [messages, setMessages] = useState([])
   const [messageText, setMessageText] = useState('')
+  const [sendingId, setSendingId] = useState(null)
   const latestMessageId = useRef(0)
 
   const load = () => {
@@ -133,6 +135,21 @@ const Rendezvous = () => {
     }
   }
 
+  const envoyerRendezvousWhatsApp = async (rdv) => {
+    setSendingId(rdv.id)
+    try {
+      const { data } = await api.post(`/admin/rendezvous/${rdv.id}/envoyer`)
+      const warning = getWhatsAppWarning(data.whatsapp, 'Rendez-vous prepare')
+      if (warning) toast.warning(warning)
+      else toast.success('Rendez-vous envoye sur WhatsApp')
+      ouvrirWhatsAppManuel(data.whatsapp)
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Envoi WhatsApp impossible')
+    } finally {
+      setSendingId(null)
+    }
+  }
+
   return (
     <AdminLayout>
       <div className="flex items-center justify-between mb-6 gap-3">
@@ -181,6 +198,13 @@ const Rendezvous = () => {
                       {Number(r.unread_count) > 0 && (
                         <span className="bg-red-500 text-white min-w-5 h-5 px-1 rounded-full flex items-center justify-center text-[10px]">{r.unread_count}</span>
                       )}
+                    </button>
+                    <button
+                      onClick={() => envoyerRendezvousWhatsApp(r)}
+                      disabled={sendingId === r.id}
+                      className="bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white text-xs py-1 px-3 rounded-xl flex items-center gap-1"
+                    >
+                      <MdSend size={14} /> {sendingId === r.id ? 'Envoi...' : 'WhatsApp'}
                     </button>
                   </div>
                 </td>

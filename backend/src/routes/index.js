@@ -36,6 +36,7 @@ router.post('/admin/rendezvous', verifyToken, isAdmin, rdvCtrl.creerRdvAdmin);
 router.get('/admin/rendezvous/notifications/stats', verifyToken, isAdmin, rdvCtrl.getRdvNotificationsStatsAdmin);
 router.get('/admin/rendezvous/:id/messages', verifyToken, isAdmin, rdvCtrl.getMessagesRdvAdmin);
 router.post('/admin/rendezvous/:id/messages', verifyToken, isAdmin, rdvCtrl.envoyerMessageRdvAdmin);
+router.post('/admin/rendezvous/:id/envoyer', verifyToken, isAdmin, rdvCtrl.envoyerRdvWhatsApp);
 router.put('/admin/rendezvous/:id/statut', verifyToken, isAdmin, rdvCtrl.changerStatutRdv);
 
 // ADMIN - Interventions
@@ -46,11 +47,13 @@ router.put('/admin/interventions/:id/statut', verifyToken, isAdmin, interCtrl.ch
 // ADMIN - Devis
 router.post('/admin/devis', verifyToken, isAdmin, factureCtrl.creerDevis);
 router.get('/admin/devis', verifyToken, isAdmin, factureCtrl.getAllDevis);
+router.post('/admin/devis/:id/envoyer', verifyToken, isAdmin, factureCtrl.envoyerDevis);
 router.put('/admin/devis/:id/statut', verifyToken, isAdmin, factureCtrl.changerStatutDevis);
 
 // ADMIN - Proforma
 router.post('/admin/proformas', verifyToken, isAdmin, factureCtrl.creerProforma);
 router.get('/admin/proformas', verifyToken, isAdmin, factureCtrl.getAllProformas);
+router.post('/admin/proformas/:id/envoyer', verifyToken, isAdmin, factureCtrl.envoyerProforma);
 router.put('/admin/proformas/:id/statut', verifyToken, isAdmin, factureCtrl.changerStatutProforma);
 
 // ADMIN - Factures

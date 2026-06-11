@@ -28,6 +28,24 @@ const getAccesFactureClientComplet = (id) => {
     : 'Facture numerique jointe dans l application client DiagAuto Mada : ouvrez Documents > Factures > Voir / Imprimer.';
 };
 
+const formatMontant = (montant) => `${Number(montant || 0).toLocaleString('fr-FR')} Ar`;
+
+const getAccesDocumentClient = (type, id) => {
+  const labels = {
+    facture: 'facture',
+    devis: 'devis',
+    proforma: 'proforma',
+  };
+  const label = labels[type] || 'document';
+  const clientUrl = String(process.env.APP_CLIENT_URL || '').trim().replace(/\/$/, '');
+  const urlUtilisable = clientUrl
+    && /^https?:\/\//i.test(clientUrl)
+    && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(clientUrl);
+  return urlUtilisable
+    ? `Lien ${label} numerique : ${clientUrl}/documents/${type}/${id}/imprimer`
+    : `${label.charAt(0).toUpperCase() + label.slice(1)} envoye par WhatsApp. Si le client n'a pas l'application, il peut demander l'impression ou l'envoi PDF a l'atelier.`;
+};
+
 // ===== DEVIS =====
 exports.creerDevis = async (req, res) => {
   try {
@@ -84,6 +102,37 @@ exports.changerStatutDevis = async (req, res) => {
     const { statut } = req.body;
     await db.query('UPDATE devis SET statut = ? WHERE id = ?', [statut, id]);
     res.json({ message: 'Statut mis à jour' });
+  } catch (err) {
+    res.status(500).json({ message: 'Erreur serveur', error: err.message });
+  }
+};
+
+exports.envoyerDevis = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [[d]] = await db.query(
+      `SELECT d.client_id, d.numero_devis, d.date_validite, d.montant_ttc, d.statut,
+              v.marque, v.modele, v.immatriculation
+       FROM devis d JOIN vehicules v ON d.vehicule_id = v.id
+       WHERE d.id = ?`,
+      [id]
+    );
+    if (!d) return res.status(404).json({ message: 'Devis introuvable' });
+
+    if (d.statut === 'brouillon') {
+      await db.query("UPDATE devis SET statut = 'envoye' WHERE id = ?", [id]);
+      d.statut = 'envoye';
+    }
+
+    const validite = d.date_validite
+      ? `\nValidite : ${new Date(`${String(d.date_validite).slice(0, 10)}T12:00:00`).toLocaleDateString('fr-FR')}`
+      : '';
+    const whatsapp = await envoyerWhatsAppClient({
+      clientId: d.client_id,
+      type: 'devis_envoi',
+      message: `DiagAuto Mada\nDevis disponible.\nDevis : ${d.numero_devis}\nVehicule : ${d.marque} ${d.modele} (${d.immatriculation})\nTotal : ${formatMontant(d.montant_ttc)}\nStatut : ${String(d.statut || '').replaceAll('_', ' ')}${validite}\n${getAccesDocumentClient('devis', id)}`,
+    });
+    res.json({ message: 'Devis pret a envoyer', statut: d.statut, whatsapp });
   } catch (err) {
     res.status(500).json({ message: 'Erreur serveur', error: err.message });
   }
@@ -163,6 +212,37 @@ exports.changerStatutProforma = async (req, res) => {
     const { statut } = req.body;
     await db.query('UPDATE proformas SET statut = ? WHERE id = ?', [statut, id]);
     res.json({ message: 'Statut mis a jour' });
+  } catch (err) {
+    res.status(500).json({ message: 'Erreur serveur', error: err.message });
+  }
+};
+
+exports.envoyerProforma = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [[p]] = await db.query(
+      `SELECT p.client_id, p.numero_proforma, p.date_validite, p.montant_ttc, p.statut,
+              v.marque, v.modele, v.immatriculation
+       FROM proformas p JOIN vehicules v ON p.vehicule_id = v.id
+       WHERE p.id = ?`,
+      [id]
+    );
+    if (!p) return res.status(404).json({ message: 'Proforma introuvable' });
+
+    if (p.statut === 'brouillon') {
+      await db.query("UPDATE proformas SET statut = 'envoye' WHERE id = ?", [id]);
+      p.statut = 'envoye';
+    }
+
+    const validite = p.date_validite
+      ? `\nValidite : ${new Date(`${String(p.date_validite).slice(0, 10)}T12:00:00`).toLocaleDateString('fr-FR')}`
+      : '';
+    const whatsapp = await envoyerWhatsAppClient({
+      clientId: p.client_id,
+      type: 'proforma_envoi',
+      message: `DiagAuto Mada\nProforma disponible.\nProforma : ${p.numero_proforma}\nVehicule : ${p.marque} ${p.modele} (${p.immatriculation})\nTotal : ${formatMontant(p.montant_ttc)}\nStatut : ${String(p.statut || '').replaceAll('_', ' ')}${validite}\n${getAccesDocumentClient('proforma', id)}`,
+    });
+    res.json({ message: 'Proforma pret a envoyer', statut: p.statut, whatsapp });
   } catch (err) {
     res.status(500).json({ message: 'Erreur serveur', error: err.message });
   }
@@ -260,7 +340,7 @@ exports.envoyerFacture = async (req, res) => {
     const whatsapp = await envoyerWhatsAppClient({
       clientId: f.client_id,
       type: 'facture_envoi',
-      message: `DiagAuto Mada\nFacture disponible.\nFacture : ${f.numero_facture}\nVehicule : ${f.marque} ${f.modele} (${f.immatriculation})\nTotal : ${Number(f.montant_ttc).toLocaleString('fr-FR')} Ar\nDeja paye : ${Number(f.montant_paye || 0).toLocaleString('fr-FR')} Ar\nReste : ${Math.max(0, reste).toLocaleString('fr-FR')} Ar\nStatut : ${String(f.statut || '').replaceAll('_', ' ')}\n${getAccesFactureClientComplet(id)}`,
+      message: `DiagAuto Mada\nFacture disponible.\nFacture : ${f.numero_facture}\nVehicule : ${f.marque} ${f.modele} (${f.immatriculation})\nTotal : ${formatMontant(f.montant_ttc)}\nDeja paye : ${formatMontant(f.montant_paye)}\nReste : ${formatMontant(Math.max(0, reste))}\nStatut : ${String(f.statut || '').replaceAll('_', ' ')}\n${getAccesDocumentClient('facture', id)}`,
     });
     res.json({ message: 'Facture prete a envoyer', whatsapp });
   } catch (err) {

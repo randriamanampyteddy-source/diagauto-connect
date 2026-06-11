@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../../components/AdminLayout'
 import api from '../../api/axios'
 import { toast } from 'react-toastify'
-import { MdAdd, MdDelete, MdPrint } from 'react-icons/md'
+import { MdAdd, MdDelete, MdPrint, MdSend } from 'react-icons/md'
+import { getWhatsAppWarning, ouvrirWhatsAppManuel } from '../../utils/whatsapp'
 
 const statusColors = {
   brouillon: 'bg-gray-100 text-gray-600',
@@ -21,6 +22,7 @@ const Devis = () => {
   const [clients, setClients] = useState([])
   const [vehicules, setVehicules] = useState([])
   const [modal, setModal] = useState(false)
+  const [sendingId, setSendingId] = useState(null)
   const [form, setForm] = useState({ client_id: '', vehicule_id: '', date_devis: '', date_validite: '', tva: 20, notes: '', lignes: [ligneVide()] })
 
   const load = () => {
@@ -58,6 +60,22 @@ const Devis = () => {
     } catch { toast.error('Erreur') }
   }
 
+  const envoyerDevis = async (devis) => {
+    setSendingId(devis.id)
+    try {
+      const { data } = await api.post(`/admin/devis/${devis.id}/envoyer`)
+      const warning = getWhatsAppWarning(data.whatsapp, 'Devis prepare')
+      if (warning) toast.warning(warning)
+      else toast.success('Devis envoye sur WhatsApp')
+      ouvrirWhatsAppManuel(data.whatsapp)
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Envoi WhatsApp impossible')
+    } finally {
+      setSendingId(null)
+    }
+  }
+
   return (
     <AdminLayout>
       <div className="flex items-center justify-between mb-6">
@@ -88,9 +106,18 @@ const Devis = () => {
                 <td className="px-4 py-3 font-semibold">{Number(d.montant_ttc).toLocaleString()} Ar</td>
                 <td className="px-4 py-3"><span className={`badge ${statusColors[d.statut]}`}>{statusLabels[d.statut]}</span></td>
                 <td className="px-4 py-3">
-                  <button onClick={() => navigate(`/documents/devis/${d.id}/imprimer`)} className="bg-primary hover:bg-blue-900 text-white text-xs py-1 px-2 rounded-xl flex items-center gap-1">
-                    <MdPrint size={13} /> Voir
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={() => navigate(`/documents/devis/${d.id}/imprimer`)} className="bg-primary hover:bg-blue-900 text-white text-xs py-1 px-2 rounded-xl flex items-center gap-1">
+                      <MdPrint size={13} /> Voir
+                    </button>
+                    <button
+                      onClick={() => envoyerDevis(d)}
+                      disabled={sendingId === d.id}
+                      className="bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white text-xs py-1 px-2 rounded-xl flex items-center gap-1"
+                    >
+                      <MdSend size={13} /> {sendingId === d.id ? 'Envoi...' : 'WhatsApp'}
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
